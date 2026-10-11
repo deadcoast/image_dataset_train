@@ -97,10 +97,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Caption drafts: {directory}")
             print("; ".join(f"{name}: {count}" for name, count in summary["decisions"].items()))
             print(
-                f"Inferred: {summary['inferred_images']}; unique scores: {summary['unique_scored_images']}"
+                f"Inferred: {summary['inferred_images']}; "
+                f"unique scores: {summary['unique_scored_images']}"
             )
             print(
-                "Draft captions and scores saved separately. Review and training export remain pending."
+                "Draft captions and scores saved separately. "
+                "Review and training export remain pending."
             )
             return 1 if summary["decisions"].get("error") else 0
 

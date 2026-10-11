@@ -19,10 +19,11 @@ from PIL import Image
 
 from image_dataset_train import __version__
 from image_dataset_train.captions import CAPTION_VERSION, caption_record, check_rules
-from image_dataset_train.config import Config, ValidationConfig
+from image_dataset_train.config import CaptionConfig, Config, ValidationConfig
 from image_dataset_train.inventory import file_sha256
 from image_dataset_train.model_bundle import (
     MODELS,
+    Label,
     atomic_json,
     bundle_path,
     load_bundle,
@@ -56,6 +57,14 @@ def _separate(source: Path, paths: list[Path]) -> None:
 
 
 def _verified_bytes(source: Path, row: dict, limits: ValidationConfig) -> bytes:
+    width, height = row.get("stored_width"), row.get("stored_height")
+    if type(width) is not int or type(height) is not int or min(width, height) < 1:
+        raise ValueError("inventory is missing valid stored dimensions")
+    if (
+        width * height > limits.max_decode_pixels
+        or max(width, height) ** 2 > limits.max_decode_pixels
+    ):
+        raise ValueError("decode or square preprocessing exceeds configured pixel limit")
     relative = PurePosixPath(row["source_path"])
     if (
         relative.is_absolute()
@@ -85,8 +94,8 @@ def _prepare(raw: bytes, size: int, limits: ValidationConfig) -> np.ndarray:
     with warnings.catch_warnings():
         warnings.simplefilter("error", Image.DecompressionBombWarning)
         with Image.open(io.BytesIO(raw)) as image:
-            if image.width * image.height > limits.max_decode_pixels:
-                raise ValueError("source exceeds configured tagging pixel limit")
+            if max(image.size) ** 2 > limits.max_decode_pixels:
+                raise ValueError("square preprocessing exceeds configured pixel limit")
             if getattr(image, "n_frames", 1) != 1:
                 raise ValueError("multiple-frame image is not eligible for tagging")
             image.load()
@@ -97,10 +106,10 @@ def _publish(
     root: Path,
     rows: list[dict],
     vectors: dict[str, np.ndarray],
-    labels: list,
+    labels: list[Label],
     metadata: dict,
     summary: dict,
-    rules,
+    rules: CaptionConfig,
     default_threshold: float,
 ) -> Path:
     root.mkdir(parents=True, exist_ok=True)
@@ -277,7 +286,6 @@ def tag_inventory(
 
 def recaption(config: Config, previous: Path) -> tuple[Path, dict]:
     """Rebuild caption drafts from a self-contained scored run, without loading an ONNX model."""
-    from image_dataset_train.model_bundle import Label
     from image_dataset_train.wd_tagger import validate_scores
 
     metadata = json.loads((previous / "run.json").read_text(encoding="utf-8"))

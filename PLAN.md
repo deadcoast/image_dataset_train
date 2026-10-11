@@ -1,6 +1,7 @@
 # Dataset preparation plan
 
-Reviewed: 2026-10-11. Status: working design; first implementation milestone started.
+Reviewed: 2026-10-11. Status: intake and initial local tagging implemented;
+similarity review, durable overrides, and training export remain pending.
 
 ## Purpose and scope
 
@@ -110,8 +111,11 @@ Document transitive grouping so an A-B-C chain cannot silently erase C.
 
 ### 3. Local tagging
 
-Use WD v3 ONNX as the baseline candidate already named in the notes. Compare
-SwinV2 with ViT-Large on the same pilot before declaring either the quality winner.
+Use WD v3 ONNX as the baseline candidate already named in the notes. SwinV2,
+ViT-Large, and EVA02-Large now have selectable pinned profiles. Compare SwinV2
+with EVA02 on the same pilot before declaring a quality winner. Camie v2 is a
+researched candidate for a separate backend, not a compatible WD model file.
+See [tagging research and implementation](docs/TAGGING.md) for sources and commands.
 The published benchmark scores do not establish accuracy on this collection.
 Pin the chosen repository revision and hash both `model.onnx` and
 `selected_tags.csv`; download both from the same revision. Model fetch is a
@@ -124,8 +128,9 @@ shape and label count; never silently truncate mismatches. Preserve special
 emoticon spellings when replacing underscores. [Reference implementation](https://huggingface.co/spaces/SmilingWolf/wd-tagger/blob/main/app.py)
 
 Keep raw scores separately from `.txt` output, including ratings and characters
-that a caption profile omits. Begin threshold evaluation at general `0.35` and
-character `0.85`; these are starting settings, not calibrated guarantees. Support
+that a caption profile omits. Start general thresholds at `0.35` for Swin/ViT and
+`0.5296` for EVA02; keep character `0.85`. These are initial settings, not calibrated
+guarantees. Per-tag overrides and score-only caption reruns are implemented. Support
 batches and resumable inference keyed by content/model/preprocessing identity.
 The model card documents a dynamic batch dimension and recommends release pins.
 [SwinV2 model card](https://huggingface.co/SmilingWolf/wd-swinv2-tagger-v3)
@@ -203,8 +208,8 @@ tests/
 data/                         # ignored; may use an external source instead
   00_inbox/                   # untouched local inputs
   runs/<run-id>/              # inventory/reports, then later stage evidence
-  models/                    # planned pinned local model artifacts
-  derived/                   # planned transforms and raw scores
+  models/                    # pinned local model artifacts
+  derived/scores/            # reusable complete score vectors
   reviews/                   # planned rules and image decisions
   exports/<snapshot-id>/     # planned train/val image-caption pairs
 .cache/                       # ignored repository-local tooling cache
@@ -224,8 +229,10 @@ each stage rather than accepting configuration that silently does nothing.
 | M5: export | Group-aware split, immutable pairs, manifest and trainer adapter | No group leakage/collisions/missing captions; changed sources rejected; trainer import smoke test. |
 | M6: full collection | Qualified batch run and dataset QA | Counts reconcile; time/disk measured; pilot errors addressed; user review recorded. Training results remain separate. |
 
-M1 can be verified using generated fixtures. M2-M6 require a representative local
-collection before quality/performance claims. The code should not search unrelated
+M1 and the tagging execution contract are tested with generated fixtures; pinned
+SwinV2 CPU inference and reference preprocessing also have local smoke evidence.
+M2-M6 require a representative local collection before quality/performance claims.
+The user requested tagging work next, so M3 proceeded before M2. The code should not search unrelated
 directories for images. Baseline work continues using these defaults; target-specific
 choices are recorded when an actual export profile is introduced.
 

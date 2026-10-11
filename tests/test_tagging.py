@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from dataclasses import replace
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from image_dataset_train.model_bundle import (
     ModelBundle,
     atomic_json,
     bundle_path,
+    fetch_bundle,
     fingerprint,
     load_bundle,
     read_labels,
@@ -208,6 +210,30 @@ def test_invalid_label_csv_and_bundle_mutation(tmp_path: Path, labels: list[Labe
         load_bundle(bundle.directory)
 
 
+def test_fetch_pins_both_files_and_reuses_verified_bundle(
+    tmp_path: Path, labels: list[Label], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import huggingface_hub
+
+    fixture = make_bundle(tmp_path / "fixture", labels)
+    requests = []
+
+    def download(**kwargs):
+        requests.append(kwargs)
+        destination = Path(kwargs["local_dir"]) / kwargs["filename"]
+        shutil.copyfile(fixture.directory / kwargs["filename"], destination)
+        return str(destination)
+
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", download)
+    root = tmp_path / "downloads"
+    directory = fetch_bundle(root, "swinv2-v3")
+    assert len(requests) == 2
+    assert {request["revision"] for request in requests} == {MODELS["swinv2-v3"].revision}
+    assert all(request["token"] is False for request in requests)
+    assert fetch_bundle(root, "swinv2-v3") == directory
+    assert len(requests) == 2
+
+
 def test_real_onnx_runtime_handles_batches_and_checks_label_count(
     tmp_path: Path, labels: list[Label]
 ) -> None:
@@ -268,6 +294,33 @@ def test_source_changes_are_rejected_even_on_cache_hit(setup: tuple[Config, Path
     row = next(row for row in read_rows(directory) if row["source_path"] == "white.png")
     assert "source_changed_since_inventory" in row["error"]
     assert "caption_path" not in row
+
+
+def test_square_allocation_limit_applies_to_cached_images(setup: tuple[Config, Path]) -> None:
+    config, inventory = setup
+    tag_inventory(config, inventory)
+    # Original 20x40 pixels fit, but padding to 40x40 would exceed this limit.
+    constrained = replace(config, validation=replace(config.validation, max_decode_pixels=1000))
+    _, summary = tag_inventory(constrained, inventory)
+    assert summary["decisions"]["error"] == 3
+    assert summary["inferred_images"] == 0 and summary["cached_images"] == 0
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"device": []},
+        {"model": []},
+        {"revision": ""},
+        {"revision": "main"},
+        {"revision": True},
+        {"batch_size": 0},
+        {"batch_size": True},
+    ],
+)
+def test_invalid_tagging_config_rejected(options: dict) -> None:
+    with pytest.raises(ValueError):
+        TaggingConfig(**options)
 
 
 def test_recaption_uses_scores_without_source_model_or_inference(

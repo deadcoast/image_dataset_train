@@ -4,11 +4,12 @@ Prepare local anime images for training: inventory, validation, deduplication,
 tagging, caption review, and reproducible image/sidecar exports. Originals stay
 untouched. Images are processed locally.
 
-**Current implementation: inventory, validation, exact duplicate identification,
-and JSON reports.** Tagging and training exports are planned, not implemented.
+**Current implementation: inventory, validation, exact duplicates, local WD tagging,
+score caching, caption regeneration, and reports.** Reviewed training exports are pending.
 
 - [PLAN.md](PLAN.md): review of the rough notes, pipeline design, acceptance criteria.
 - [TODO.md](TODO.md): implementation status and next work.
+- [docs/TAGGING.md](docs/TAGGING.md): model research, tagging commands, and qualification limits.
 - [OVERVIEW.md](TAGGING-METHODS.md): preserved original notes and example snippets.
 
 ## Run on Windows
@@ -82,12 +83,13 @@ directory access, or publication failure. No inventory result means training-rea
 ## Development
 
 ```powershell
-uv run --locked --cache-dir .cache/uv ruff check .
-uv run --locked --cache-dir .cache/uv ruff format --check .
-uv run --locked --cache-dir .cache/uv pytest --basetemp .cache/pytest-local
+uv run --locked --extra tag-cpu --cache-dir .cache/uv ruff check .
+uv run --locked --extra tag-cpu --cache-dir .cache/uv ruff format --check .
+uv run --locked --extra tag-cpu --cache-dir .cache/uv pytest --basetemp .cache/pytest-local
 uv build --cache-dir .cache/uv
 ```
 
-Tests use generated, non-sensitive fixtures. No model download or GPU is required
-for the implemented stage. Large datasets, real-image QA, inference quality, and
-trainer compatibility have not yet been qualified.
+Tests use generated fixtures and small ONNX graphs; no pretrained model or GPU
+is needed for the automated suite. Intake does not require tagging extras.
+Large datasets, real-image QA, model accuracy, and trainer compatibility remain
+unqualified. A real pinned SwinV2 CPU smoke run is documented in the tagging guide.

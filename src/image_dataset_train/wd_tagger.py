@@ -107,7 +107,12 @@ class WDTagger:
         self.cache_namespace = fingerprint(self.cache_identity)
 
     def predict(self, batch: np.ndarray) -> np.ndarray:
-        if batch.dtype != np.float32 or batch.shape[1:] != (self.size, self.size, 3):
+        if (
+            batch.ndim != 4
+            or len(batch) == 0
+            or batch.dtype != np.float32
+            or batch.shape[1:] != (self.size, self.size, 3)
+        ):
             raise ValueError("invalid preprocessed WD batch")
         if self.fixed_batch and len(batch) != self.fixed_batch:
             raise ValueError("model requires batch=1")

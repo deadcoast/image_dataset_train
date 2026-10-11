@@ -53,7 +53,7 @@ class TaggingConfig:
         from image_dataset_train.model_bundle import bundle_path
 
         bundle_path(Path(), self.model, self.revision)
-        if self.device not in {"cpu", "cuda", "auto"}:
+        if not isinstance(self.device, str) or self.device not in {"cpu", "cuda", "auto"}:
             raise ValueError("tagging.device must be cpu, cuda, or auto")
         if type(self.batch_size) is not int or not 1 <= self.batch_size <= 64:
             raise ValueError("tagging.batch_size must be an integer between 1 and 64")

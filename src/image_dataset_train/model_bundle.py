@@ -80,15 +80,17 @@ def atomic_json(path: Path, value: object) -> None:
 
 
 def bundle_path(root: Path, model: str, revision: str | None = None) -> Path:
-    if model not in MODELS:
+    if not isinstance(model, str) or model not in MODELS:
         raise ValueError(f"unknown WD model: {model}")
-    revision = revision or MODELS[model].revision
-    if not re.fullmatch(r"[a-f0-9]{40}", revision):
+    revision = MODELS[model].revision if revision is None else revision
+    if not isinstance(revision, str) or not re.fullmatch(r"[a-f0-9]{40}", revision):
         raise ValueError("model revision must be a full 40-character commit hash")
     return root / model / revision
 
 
 def fetch_bundle(root: Path, model: str, revision: str | None = None) -> Path:
+    os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+    os.environ.setdefault("HF_XET_CACHE", str(root.resolve() / ".xet"))
     try:
         from huggingface_hub import hf_hub_download
     except ImportError as exc:
@@ -98,7 +100,7 @@ def fetch_bundle(root: Path, model: str, revision: str | None = None) -> Path:
         load_bundle(destination)
         return destination
     spec = MODELS[model]
-    revision = revision or spec.revision
+    revision = spec.revision if revision is None else revision
     destination.mkdir(parents=True, exist_ok=True)
     hashes = {}
     for filename in ("model.onnx", "selected_tags.csv"):

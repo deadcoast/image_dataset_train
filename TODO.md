@@ -2,8 +2,9 @@
 
 ## Current boundary
 
-M1 is implemented and verified against generated fixtures. No real dataset has been scanned.
-No model has been downloaded, no inference has run, and no training export exists.
+M1 and the initial WD tagging stage are implemented. The pinned SwinV2 model has
+been downloaded and CPU inference exercised on generated fixtures. No user dataset
+has been scanned or tagged, and no reviewed training export exists.
 `PLAN.md` is the working design. `OVERVIEW.md` remains historical source material.
 
 ## M1: inventory and validation
@@ -38,9 +39,9 @@ anime tagging accuracy, large-collection performance, or training readiness.
 
 ## Next implementation
 
-1. M2: pHash pair proposals and reviewable related-image groups; no automatic moves.
-2. M3: pinned WD model fetch, correct preprocessing/category handling, raw score cache.
-3. M4: deterministic normalization and durable per-image review overrides.
+1. Tagging quality: compare model profiles and tune thresholds on a reviewed anime pilot.
+2. M2: pHash pair proposals and reviewable related-image groups; no automatic moves.
+3. M4: durable per-image review overrides; initial deterministic caption rules already work.
 4. M5: group-aware splitting, verified image/caption exports, Kohya adapter.
 5. M6: pilot qualification, then full collection run and QA.
 
@@ -48,6 +49,37 @@ anime tagging accuracy, large-collection performance, or training readiness.
 
 - Real images: readability, size distribution, caption collisions, duplicate rate.
 - Similarity: calibrated false-match/missed-match behavior on anime artwork.
-- Tagging: reference parity, throughput, and accuracy on this collection.
+- Tagging: throughput and accuracy on this collection; alternate models and physical GPU inference.
 - Export: pinned trainer import and repeat/bucket behavior.
 - Dataset acceptance: image/caption review; automated tests cannot establish it.
+
+## M3 and initial caption rules: implemented
+
+- [x] Research WD SwinV2/ViT-Large/EVA02-Large and Camie v2 using primary sources.
+- [x] Pinned WD downloads with model/label checksums and a separate offline inference stage.
+- [x] Reference input preparation, EXIF correction, category indexing, tensor/output validation.
+- [x] CPU/auto/explicit-CUDA selection; actual registered providers recorded.
+- [x] Batch inference, fixed-batch-one handling, atomic raw-score cache, interrupted-run recovery.
+- [x] Recheck source hashes, preserve originals/manual captions, retain every score/category.
+- [x] Model/per-tag thresholds, opt-in characters, explicit exclusions, ambiguity/conflict flags.
+- [x] Self-contained runs and score-only recaptioning into a new run.
+- [x] Real pinned SwinV2 CPU smoke and four exact publisher-preprocessing tensor comparisons.
+- [x] Final full-suite, lint, format, build, and installed-package checks for 0.2.0.
+- [ ] Actual anime accuracy, alternate WD weights, physical GPU execution, collection-scale QA.
+
+Research, commands, evidence scope, and pending comparisons are in
+[docs/TAGGING.md](docs/TAGGING.md). Camie is researched but not implemented.
+
+## Tagging verification: 2026-10-11
+
+- Full suite: **66 passed, 1 skipped** using the CPU extra. The existing skip is
+  Windows symlink creation privilege (`WinError 1314`); junction coverage passes.
+- Ruff lint and formatting: passed. Source distribution and wheel: built.
+- Isolated 0.2.0 CPU wheel: `scan`, `tag`, and `recaption` commands passed using
+  actual pinned SwinV2 inference, with source-image/manual-caption preservation.
+- Real-model smoke: two unique generated images inferred, a duplicate reused,
+  rerun served from cache, and recaption performed zero inference.
+- Reference input parity: **4/4 exact tensor matches** against the inspected
+  publisher method at `fbd35b187d6e8cb8a00c529d52999f82d6b5193b`.
+- This establishes execution and artifact handling, not accuracy on anime images
+  or acceptance of a training dataset.
