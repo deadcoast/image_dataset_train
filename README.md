@@ -9,7 +9,7 @@ and JSON reports.** Tagging and training exports are planned, not implemented.
 
 - [PLAN.md](PLAN.md): review of the rough notes, pipeline design, acceptance criteria.
 - [TODO.md](TODO.md): implementation status and next work.
-- [OVERVIEW.md](OVERVIEW.md): preserved original notes and example snippets.
+- [OVERVIEW.md](TAGGING-METHODS.md): preserved original notes and example snippets.
 
 ## Run on Windows
 

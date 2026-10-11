@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import tomllib
 import math
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -107,8 +107,10 @@ def load_config(path: Path) -> Config:
     )
     resolved = {}
     for name, default in (
-        ("source", "data/00_inbox"), ("runs", "data/runs"),
-        ("models", "data/models"), ("scores", "data/derived/scores"),
+        ("source", "data/00_inbox"),
+        ("runs", "data/runs"),
+        ("models", "data/models"),
+        ("scores", "data/derived/scores"),
     ):
         value = paths.get(name, default)
         if not isinstance(value, str) or not value.strip():
@@ -117,6 +119,8 @@ def load_config(path: Path) -> Config:
     tagging = _table(raw.get("tagging", {}), "tagging", set(TaggingConfig.__dataclass_fields__))
     captions = _table(raw.get("captions", {}), "captions", set(CaptionConfig.__dataclass_fields__))
     return Config(
-        **resolved, validation=ValidationConfig(**validation),
-        tagging=TaggingConfig(**tagging), captions=CaptionConfig(**captions),
+        **resolved,
+        validation=ValidationConfig(**validation),
+        tagging=TaggingConfig(**tagging),
+        captions=CaptionConfig(**captions),
     )

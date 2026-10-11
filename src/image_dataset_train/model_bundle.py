@@ -102,17 +102,32 @@ def fetch_bundle(root: Path, model: str, revision: str | None = None) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     hashes = {}
     for filename in ("model.onnx", "selected_tags.csv"):
-        path = Path(hf_hub_download(
-            repo_id=spec.repo, filename=filename, revision=revision,
-            local_dir=destination, token=False,
-        ))
+        try:
+            path = Path(
+                hf_hub_download(
+                    repo_id=spec.repo,
+                    filename=filename,
+                    revision=revision,
+                    local_dir=destination,
+                    token=False,
+                )
+            )
+        except Exception as exc:
+            raise RuntimeError(f"model download failed for {filename}: {exc}") from exc
         hashes[filename] = file_sha256(path)
     labels = read_labels(destination / "selected_tags.csv")
     identity = {"repo": spec.repo, "revision": revision, "files": hashes}
-    atomic_json(destination / "model.json", {
-        "schema_version": 1, "family": "wd-v3", "model": model,
-        **identity, "artifact_id": fingerprint(identity), "label_count": len(labels),
-    })
+    atomic_json(
+        destination / "model.json",
+        {
+            "schema_version": 1,
+            "family": "wd-v3",
+            "model": model,
+            **identity,
+            "artifact_id": fingerprint(identity),
+            "label_count": len(labels),
+        },
+    )
     return destination
 
 
