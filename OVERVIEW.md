@@ -1,5 +1,10 @@
 # IMAGE DATASET TRAINER
 
+> Original rough notes, preserved for reference. The reviewed design and work order
+> are now in [PLAN.md](PLAN.md), implementation status is in [TODO.md](TODO.md),
+> and runnable commands are in [README.md](README.md). Code blocks below are
+> historical proposals, not the current implementation.
+>
 > Image Dataset Training Pipeline (v0.0.1)
 > Not a final plan, rough notes.
 
@@ -64,18 +69,24 @@ size = inp.shape[1]
 
 ROOT = Path("dataset/raw")
 
+
 def prep(path):
     im = Image.open(path).convert("RGB")
     im = im.resize((size, size), Image.BICUBIC)
     arr = np.asarray(im, dtype=np.float32)[:, :, ::-1]  # RGB -> BGR
     return np.expand_dims(arr, 0)
 
+
 for img in ROOT.rglob("*"):
     if img.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
         continue
     probs = sess.run(None, {inp.name: prep(img)})[0][0]
-    tag_probs = probs[len(ratings):]
-    kept = [names[i].replace("_", " ") for i, p in enumerate(tag_probs) if p >= THRESHOLD and names[i] not in DROP]
+    tag_probs = probs[len(ratings) :]
+    kept = [
+        names[i].replace("_", " ")
+        for i, p in enumerate(tag_probs)
+        if p >= THRESHOLD and names[i] not in DROP
+    ]
     img.with_suffix(".txt").write_text(", ".join(kept), encoding="utf-8")
     print(img.name, len(kept))
 ```
@@ -414,7 +425,9 @@ def cmd_safety_names(args: argparse.Namespace) -> int:
     names: set[str] = set()
     if args.blocklist:
         text = Path(args.blocklist).read_text(encoding="utf-8")
-        names = {line.strip() for line in text.splitlines() if line.strip() and not line.startswith("#")}
+        names = {
+            line.strip() for line in text.splitlines() if line.strip() and not line.startswith("#")
+        }
     n = scan_inbox_names(inbox, REJECTED, MANIFEST, names)
     print(f"quarantined {n} by filename -> {REJECTED / 'safety'}")
     return 0
@@ -563,19 +576,25 @@ def dedupe_inbox(
     """Keep the first image for each exact hash and each near phash. Move the rest."""
     seen_exact: dict[str, Path] = {}
     seen_phash: list[tuple[str, Path]] = []
-    stats = {"seen": 0, "exact": 0, "near": 0, "kept": 0, "phash": int(imagehash is not None and use_phash)}
+    stats = {
+        "seen": 0,
+        "exact": 0,
+        "near": 0,
+        "kept": 0,
+        "phash": int(imagehash is not None and use_phash),
+    }
 
-    images = [
-        p for p in sorted(inbox.rglob("*"))
-        if p.is_file() and p.suffix.lower() in IMAGE_EXTS
-    ]
+    images = [p for p in sorted(inbox.rglob("*")) if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
     for path in images:
         stats["seen"] += 1
         digest = file_sha256(path)
         if digest in seen_exact:
             quarantine(
-                path, rejected_root, "duplicate",
-                f"exact:{digest} kept={seen_exact[digest]}", manifest,
+                path,
+                rejected_root,
+                "duplicate",
+                f"exact:{digest} kept={seen_exact[digest]}",
+                manifest,
             )
             stats["exact"] += 1
             continue
@@ -590,8 +609,11 @@ def dedupe_inbox(
                 hit = _near(current, seen_phash, hamming)
                 if hit is not None:
                     quarantine(
-                        path, rejected_root, "duplicate",
-                        f"phash:{current} dist<={hamming} kept={hit}", manifest,
+                        path,
+                        rejected_root,
+                        "duplicate",
+                        f"phash:{current} dist<={hamming} kept={hit}",
+                        manifest,
                     )
                     stats["near"] += 1
                     continue
@@ -620,9 +642,7 @@ def _log_skip(manifest: Path, path: Path, detail: str) -> None:
 `src/pipeline/normalize.py`
 
 ```python
-"""Rewrite WD14 sidecars into a stable tag string.
-
-"""
+"""Rewrite WD14 sidecars into a stable tag string."""
 
 from __future__ import annotations
 
@@ -631,8 +651,14 @@ from pathlib import Path
 from src.pipeline.safety import IMAGE_EXTS, quarantine
 
 DROP = {
-    "general", "lowres", "bad anatomy", "bad hands", "jpeg artifacts",
-    "signature", "watermark", "artist name",
+    "general",
+    "lowres",
+    "bad anatomy",
+    "bad hands",
+    "jpeg artifacts",
+    "signature",
+    "watermark",
+    "artist name",
 }
 
 # tagger alias -> training tag. Keys and values are space-separated, lower case.
@@ -657,7 +683,6 @@ ALIAS = {
 }
 
 
-
 def _norm(tag: str) -> str:
     return " ".join(tag.replace("_", " ").replace(",", " ").split()).lower()
 
@@ -674,7 +699,9 @@ def parse_tags(text: str) -> list[str]:
     return out
 
 
-def rewrite(tags: list[str], trigger: str | None, drop_characters: bool) -> tuple[list[str], list[str]]:
+def rewrite(
+    tags: list[str], trigger: str | None, drop_characters: bool
+) -> tuple[list[str], list[str]]:
     """Returns (kept)"""
     hits = [t for t in tags]
     if hits:
@@ -706,10 +733,7 @@ def normalize_inbox(
     drop_characters: bool = True,
 ) -> dict[str, int]:
     stats = {"seen": 0, "written": 0, "rejected": 0, "missing_txt": 0}
-    images = [
-        p for p in sorted(inbox.rglob("*"))
-        if p.is_file() and p.suffix.lower() in IMAGE_EXTS
-    ]
+    images = [p for p in sorted(inbox.rglob("*")) if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
     for image in images:
         stats["seen"] += 1
         sidecar = image.with_suffix(".txt")
@@ -720,8 +744,10 @@ def normalize_inbox(
         kept, hits = rewrite(tags, trigger, drop_characters)
         if hits:
             quarantine(
-                image, rejected_root,
-                "normalize:" + ",".join(hits), manifest,
+                image,
+                rejected_root,
+                "normalize:" + ",".join(hits),
+                manifest,
             )
             stats["rejected"] += 1
             continue
@@ -742,7 +768,9 @@ def cmd_dedupe(args: argparse.Namespace) -> int:
     if not inbox.exists():
         print(f"missing inbox: {inbox}", file=sys.stderr)
         return 2
-    stats = dedupe_inbox(inbox, REJECTED, MANIFEST, use_phash=not args.exact_only, hamming=args.hamming)
+    stats = dedupe_inbox(
+        inbox, REJECTED, MANIFEST, use_phash=not args.exact_only, hamming=args.hamming
+    )
     print(
         f"seen {stats['seen']} kept {stats['kept']} "
         f"exact {stats['exact']} near {stats['near']} phash_on {stats['phash']}"
@@ -757,7 +785,9 @@ def cmd_normalize(args: argparse.Namespace) -> int:
         print(f"missing inbox: {inbox}", file=sys.stderr)
         return 2
     stats = normalize_inbox(
-        inbox, REJECTED, MANIFEST,
+        inbox,
+        REJECTED,
+        MANIFEST,
         trigger=args.trigger,
         drop_characters=not args.keep_characters,
     )
@@ -863,6 +893,7 @@ from pathlib import Path
 
 from src.pipeline.safety import IMAGE_EXTS
 
+
 def _safe_name(src: Path, digest8: str) -> str:
     stem = "".join(c if c.isalnum() or c in "-_" else "_" for c in src.stem)[:60]
     return f"{digest8}_{stem}{src.suffix.lower()}"
@@ -913,6 +944,7 @@ def ingest(
 
 def _short_hash(path: Path) -> str:
     import hashlib
+
     h = hashlib.sha256()
     with path.open("rb") as f:
         h.update(f.read(1 << 20))
@@ -956,10 +988,7 @@ def validate_inbox(
 ) -> dict[str, int]:
     modes = allowed_modes or {"RGB", "RGBA", "L"}
     stats = {"seen": 0, "ok": 0, "invalid": 0, "missing_txt": 0}
-    images = [
-        p for p in sorted(inbox.rglob("*"))
-        if p.is_file() and p.suffix.lower() in IMAGE_EXTS
-    ]
+    images = [p for p in sorted(inbox.rglob("*")) if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
     for path in images:
         stats["seen"] += 1
         reason = _check(path, min_side, max_side, min_bytes, max_bytes, modes)
@@ -1032,10 +1061,7 @@ def split_inbox(
     train.mkdir(parents=True, exist_ok=True)
     val.mkdir(parents=True, exist_ok=True)
     stats = {"seen": 0, "train": 0, "val": 0, "missing_txt": 0}
-    images = [
-        p for p in sorted(inbox.rglob("*"))
-        if p.is_file() and p.suffix.lower() in IMAGE_EXTS
-    ]
+    images = [p for p in sorted(inbox.rglob("*")) if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
     for path in images:
         stats["seen"] += 1
         bucket = "val" if _in_val(path, val_ratio, seed) else "train"
@@ -1108,7 +1134,7 @@ def write_report(
                 continue
             row = json.loads(line)
             decisions[row.get("decision", "?")] += 1
-            reasons[f"{row.get('decision','?')}:{row.get('reason','?')}"] += 1
+            reasons[f"{row.get('decision', '?')}:{row.get('reason', '?')}"] += 1
 
     tags: Counter[str] = Counter()
     images = 0
@@ -1138,7 +1164,6 @@ def write_report(
     lines += ["", f"top_tags {top_tags}"]
     lines += [f"  {k} {v}" for k, v in tags.most_common(top_tags)]
 
-
     dest = out_dir / "summary.txt"
     dest.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return dest
@@ -1155,23 +1180,34 @@ from src.pipeline.validate import validate_inbox
 
 def cmd_ingest(args: argparse.Namespace) -> int:
     stats = ingest(
-        Path(args.source), _inbox(args.inbox), MANIFEST,
-        mode=args.mode, flatten=not args.keep_tree,
+        Path(args.source),
+        _inbox(args.inbox),
+        MANIFEST,
+        mode=args.mode,
+        flatten=not args.keep_tree,
     )
-    print(f"seen {stats['seen']} ingested {stats['ingested']} skipped {stats['skipped']} exists {stats['exists']}")
+    print(
+        f"seen {stats['seen']} ingested {stats['ingested']} skipped {stats['skipped']} exists {stats['exists']}"
+    )
     return 0
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
     inbox = _inbox(args.inbox)
-    stats = validate_inbox(inbox, REJECTED, MANIFEST, min_side=args.min_side, max_side=args.max_side)
+    stats = validate_inbox(
+        inbox, REJECTED, MANIFEST, min_side=args.min_side, max_side=args.max_side
+    )
     print(f"seen {stats['seen']} ok {stats['ok']} invalid {stats['invalid']}")
     return 0
 
 
 def cmd_split(args: argparse.Namespace) -> int:
-    stats = split_inbox(_inbox(args.inbox), TRAIN, VAL, MANIFEST, val_ratio=args.val_ratio, seed=args.seed)
-    print(f"seen {stats['seen']} train {stats['train']} val {stats['val']} missing_txt {stats['missing_txt']}")
+    stats = split_inbox(
+        _inbox(args.inbox), TRAIN, VAL, MANIFEST, val_ratio=args.val_ratio, seed=args.seed
+    )
+    print(
+        f"seen {stats['seen']} train {stats['train']} val {stats['val']} missing_txt {stats['missing_txt']}"
+    )
     return 0
 
 

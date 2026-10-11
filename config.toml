@@ -1,0 +1,14 @@
+# Only implemented settings belong here. Paths are relative to this file.
+schema_version = 1
+
+[paths]
+source = "data/00_inbox"
+runs = "data/runs"
+
+[validation]
+# Resolution concerns are review flags, not destructive rejection rules.
+min_short_side = 768
+max_long_side = 4096
+# Decode limits are separate from training-resolution preferences.
+max_decode_pixels = 50000000
+max_file_bytes = 268435456
