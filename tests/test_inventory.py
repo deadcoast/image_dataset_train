@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -252,6 +254,25 @@ def test_links_are_not_followed(source: Path, preferences: ValidationConfig) -> 
     rows = scan(source, preferences)
     assert len(rows) == 2
     assert all(row.kind == "link" and row.sha256 is None for row in rows)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows junction behavior")
+def test_windows_junction_is_not_followed(source: Path, preferences: ValidationConfig) -> None:
+    outside = source.parent / "outside-junction"
+    outside.mkdir()
+    picture(outside / "private.png")
+    junction = source / "linked-folder"
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(junction), str(outside)],
+        check=True,
+        capture_output=True,
+    )
+    assert junction.is_junction()
+    rows = scan(source, preferences)
+    assert len(rows) == 1
+    assert rows[0].kind == "link"
+    assert rows[0].sha256 is None
+    assert (outside / "private.png").exists()
 
 
 def test_empty_scan_is_explicitly_not_training_ready(

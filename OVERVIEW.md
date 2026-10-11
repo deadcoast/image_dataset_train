@@ -4,13 +4,18 @@
 > are now in [PLAN.md](PLAN.md), implementation status is in [TODO.md](TODO.md),
 > and runnable commands are in [README.md](README.md). Code blocks below are
 > historical proposals, not the current implementation.
+
+> Original rough notes, preserved for reference. The reviewed design and work order
+> are now in [PLAN.md](PLAN.md), implementation status is in [TODO.md](TODO.md),
+> and runnable commands are in [README.md](README.md). Code blocks below are
+> historical proposals, not the current implementation.
 >
 > Image Dataset Training Pipeline (v0.0.1)
 > Not a final plan, rough notes.
 
 ## WD14
 
-WD14 writes a `.txt` next to every file. You only fix the rules and the bad tags afterward.
+WD14 writes a `.txt` next to every file. You only fix the rules and the tags.
 
 - comma-separated Danbooru tags plus a confidence score.
 - keep tags above a threshold and drop the scores.

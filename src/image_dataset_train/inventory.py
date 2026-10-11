@@ -100,7 +100,8 @@ def _inspect_image(path: Path, row: Record, config: ValidationConfig) -> None:
             # verify() checks file structure; a second open/load checks actual decoding.
             with Image.open(path) as image:
                 image.load()
-                row.exif_orientation = image.getexif().get(274, 1)
+                orientation = image.getexif().get(274, 1)
+                row.exif_orientation = orientation if type(orientation) is int else None
                 if row.exif_orientation in {5, 6, 7, 8}:
                     row.width, row.height = image.height, image.width
                 row.has_alpha = "A" in image.getbands() or "transparency" in image.info
