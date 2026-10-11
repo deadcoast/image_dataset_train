@@ -2,7 +2,7 @@
 
 ## Current boundary
 
-M1 is implemented; verification is in progress. No real dataset has been scanned.
+M1 is implemented and verified against generated fixtures. No real dataset has been scanned.
 No model has been downloaded, no inference has run, and no training export exists.
 `PLAN.md` is the working design. `OVERVIEW.md` remains historical source material.
 
@@ -13,7 +13,26 @@ No model has been downloaded, no inference has run, and no training export exist
 - [x] Decode checks, frame checks, EXIF dimensions, alpha/mode/ICC and size flags.
 - [x] Exact duplicate references and caption-conflict detection.
 - [x] New report directory per run, deterministic manifest, atomic publication.
-- [ ] Preservation/failure/rerun tests, lint, format, package build, installed CLI smoke test.
+- [x] Preservation/failure/rerun tests, lint, format, package build, installed CLI smoke test.
+
+## Verification: 2026-10-11
+
+Windows, Python 3.12.10, Pillow 12.3.0, pytest 9.1.1, Ruff 0.17.0.
+
+- `ruff check .`: passed. Initial line-length findings were corrected with formatting.
+- `ruff format --check .`: passed. Historical `OVERVIEW.md` is excluded from formatting.
+- `pytest -q -rs --basetemp .cache/pytest-final`: **31 passed, 1 skipped**.
+  The symlink test is skipped because Windows denies symlink creation with
+  `WinError 1314`. The separate real Windows junction test passes.
+- `uv build`: wheel and source distribution built successfully.
+- Isolated wheel installation: console entry point and module CLI both executed.
+  A five-file generated fixture produced the expected report, and every input
+  file's SHA256 was unchanged. Import location was the wheel environment's
+  `site-packages`, not the editable source tree.
+- Original `OVERVIEW.md` bytes are preserved after removing the added navigation banner.
+
+These checks establish intake behavior and packaging. They do not establish
+anime tagging accuracy, large-collection performance, or training readiness.
 
 ## Next implementation
 

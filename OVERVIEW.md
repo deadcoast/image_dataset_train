@@ -1,17 +1,16 @@
 # IMAGE DATASET TRAINER
 
-> Original rough notes, preserved for reference. The reviewed design and work order
-> are now in [PLAN.md](PLAN.md), implementation status is in [TODO.md](TODO.md),
-> and runnable commands are in [README.md](README.md). Code blocks below are
-> historical proposals, not the current implementation.
->
-> Original rough notes, preserved for reference. The reviewed design and work order
-> are now in [PLAN.md](PLAN.md), implementation status is in [TODO.md](TODO.md),
-> and runnable commands are in [README.md](README.md). Code blocks below are
-> historical proposals, not the current implementation.
->
 > Image Dataset Training Pipeline (v0.0.1)
-> Not a final plan, rough notes.
+>
+> Original rough notes, preserved for reference. The reviewed design and work order
+> are now in [PLAN.md](PLAN.md), implementation status is in [TODO.md](TODO.md),
+> and runnable commands are in [README.md](README.md). Code blocks below are
+> historical proposals, not the current implementation.
+>
+> Original rough notes, preserved for reference. The reviewed design and work order
+> are now in [PLAN.md](PLAN.md), implementation status is in [TODO.md](TODO.md),
+> and runnable commands are in [README.md](README.md). Code blocks below are
+> historical proposals, not the current implementation.
 
 ## WD14
 
