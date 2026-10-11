@@ -4,6 +4,8 @@ schema_version = 1
 [paths]
 source = "data/00_inbox"
 runs = "data/runs"
+models = "data/models"
+scores = "data/derived/scores"
 
 [validation]
 # Resolution concerns are review flags, not destructive rejection rules.
@@ -12,3 +14,20 @@ max_long_side = 4096
 # Decode limits are separate from training-resolution preferences.
 max_decode_pixels = 50000000
 max_file_bytes = 268435456
+
+[tagging]
+# Also supported: vit-large-v3, eva02-large-v3. Each uses a pinned revision.
+model = "swinv2-v3"
+device = "auto"
+batch_size = 4
+
+[captions]
+# Omit general_threshold to use the model profile: 0.35 for Swin/ViT,
+# 0.5296 for EVA02. These are initial settings, not calibrated guarantees.
+character_threshold = 0.85
+keep_characters = false
+uncertainty_margin = 0.05
+drop_tags = []
+
+[captions.tag_thresholds]
+# Optional overrides use exact CSV names, e.g. blue_hair = 0.5

@@ -29,7 +29,9 @@ Windows, Python 3.12.10, Pillow 12.3.0, pytest 9.1.1, Ruff 0.17.0.
   A five-file generated fixture produced the expected report, and every input
   file's SHA256 was unchanged. Import location was the wheel environment's
   `site-packages`, not the editable source tree.
-- Original `OVERVIEW.md` bytes are preserved after removing the added navigation banner.
+- Original notes remain in `OVERVIEW.md`, with navigation to the active documents.
+  Concurrent repository edits and formatting changes are retained; byte-for-byte
+  identity with the initial note is not claimed.
 
 These checks establish intake behavior and packaging. They do not establish
 anime tagging accuracy, large-collection performance, or training readiness.
