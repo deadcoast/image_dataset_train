@@ -4,7 +4,7 @@
 > are now in [PLAN.md](PLAN.md), implementation status is in [TODO.md](TODO.md),
 > and runnable commands are in [README.md](README.md). Code blocks below are
 > historical proposals, not the current implementation.
-
+>
 > Original rough notes, preserved for reference. The reviewed design and work order
 > are now in [PLAN.md](PLAN.md), implementation status is in [TODO.md](TODO.md),
 > and runnable commands are in [README.md](README.md). Code blocks below are
