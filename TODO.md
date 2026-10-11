@@ -1,5 +1,45 @@
 # Implementation status
 
+## Trainime 0.3.0: implemented and installed
+
+- [x] Exact four-choice Home menu; path and `--dryrun` are the only action prompts.
+- [x] Session/default path precedence, atomic saved settings, quoted/Unicode paths,
+  completion, concise Help, and cancellation back to Home.
+- [x] One tagging action: inspection, automatic pinned model setup, inference for
+  missing captions only, cache reuse, and exclusive source-side `.txt` publication.
+- [x] Remove paired captions with SHA256-verified recovery copies and a durable
+  per-file journal; preserve images, unrelated text, and ambiguous associations.
+- [x] Read-only/offline previews, OS job locks, source rechecks, partial-operation
+  reports, direct commands, bounded summaries, and copyable command/path output.
+- [x] Installed CPU wheel into the existing uv tool environment. `trainime` resolves
+  to `C:\Users\ryanf\.local\bin\trainime.exe` and runs outside the checkout.
+- [x] Reused the already verified pinned SwinV2 artifacts in the application cache;
+  the installed command is ready to tag without another model download.
+
+Verification on 2026-10-11:
+
+- **96 passed, 1 skipped** with `--basetemp .cache/pytest-trainime-release`.
+  The existing skip is Windows symlink privilege; the real junction test passes.
+- Ruff lint, formatting, wheel/sdist build, and diff whitespace checks pass.
+- Live Windows terminal: exact Home menu, Settings, Ctrl+C, quoted path input,
+  `--dryrun` prompt, and reuse of the session path without another path prompt.
+- Installed wheel, real SwinV2 CPU: two unique generated images inferred; an
+  existing manual caption preserved; all three paired captions backed up and
+  removed; retagging reused two score vectors plus one exact duplicate with zero
+  new inference. All image hashes and unrelated text were preserved.
+- Evidence: `.cache/trainime-smoke/00eede1dc2a84d1b8ded683f8337e934/verification.json`
+  and adjacent command transcripts. The imported module is the installed wheel's
+  `site-packages`, not editable source. No user image collection was used.
+- The initial installed smoke caught access-time changes being mistaken for
+  caption edits. That run stopped removal without deleting captions; the check
+  now compares size, modification time, inode, and mode, with a regression test
+  that deliberately updates access times. Initial evidence is retained under
+  `.cache/trainime-smoke/cc21080cd061446d853fe53e293fce10/`.
+
+Workflow design and research links: [docs/TRAINIME.md](docs/TRAINIME.md).
+Anime accuracy, physical CUDA, large-collection performance, reviewed export,
+and trainer acceptance remain pending.
+
 ## Current boundary
 
 M1, WD tagging, and the `trainime` interactive directory workflow are implemented.
