@@ -188,7 +188,11 @@ def _publish(
 
 
 def tag_inventory(
-    config: Config, inventory: Path, progress: Callable[[str], None] | None = None
+    config: Config,
+    inventory: Path,
+    progress: Callable[[str], None] | None = None,
+    *,
+    only_sources: set[str] | None = None,
 ) -> tuple[Path, dict]:
     started = datetime.now(UTC).isoformat()
     inventory_meta, records, inventory_hash = _read_inventory(inventory)
@@ -234,6 +238,9 @@ def tag_inventory(
             "decision": "skipped",
         }
         rows.append(row)
+        if only_sources is not None and record["source_path"] not in only_sources:
+            row["reason"] = "not_selected_for_caption_publication"
+            continue
         if record["decision"] not in {"candidate", "review", "duplicate"}:
             row["reason"] = "not_eligible_at_intake"
             continue

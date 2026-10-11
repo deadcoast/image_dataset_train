@@ -1,6 +1,6 @@
 # Dataset preparation plan
 
-Reviewed: 2026-10-11. Status: intake and initial local tagging implemented;
+Reviewed: 2026-10-11. Status: intake, local tagging, and Trainime directory actions implemented;
 similarity review, durable overrides, and training export remain pending.
 
 ## Purpose and scope
@@ -10,7 +10,8 @@ images and matching captions. The collection includes nude images; nudity alone
 is not an image-quality failure. Preserve accurate content labels without adding
 attributes that the image does not support.
 
-The requirements already established in `OVERVIEW.md` are sufficient to start:
+The requirements established in the original `OVERVIEW.md` (now `TAGGING-METHODS.md`)
+are sufficient to start:
 Windows, Python, local paths, local inference, batch operation, image/`.txt`
 exports, and optional ComfyUI inspection. No hosted caption API. Training itself
 belongs to the downstream trainer. No trainer or GPU choice is needed for intake.
@@ -42,8 +43,13 @@ in an existing application. The repository initially contained only `OVERVIEW.md
 
 ## Design decisions
 
-1. **Preserve originals.** Sources and their sidecars are inputs. Rejections are
-   records, not moves or deletions. Derivatives and exports use separate paths.
+1. **Preserve images and existing annotations.** Source images are read-only.
+   Technical `dataset` stages keep source sidecars read-only as well. The requested
+   `trainime` workflow explicitly creates missing source-side captions and removes
+   matched captions on demand, after verified backup. It never overwrites an
+   existing caption while tagging. Rejections remain records, not image moves or
+   deletions. Derivatives and exports use separate paths. See
+   [the Trainime workflow contract](docs/TRAINIME.md).
 2. **Separate evidence from presentation.** Source hashes, raw scores, model
    revisions, review decisions, normalized tags, and exported captions are distinct.
    Changing thresholds must not require repeating inference.

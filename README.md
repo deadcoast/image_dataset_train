@@ -1,18 +1,70 @@
-# Image Dataset Train
+# Trainime
 
 Prepare local anime images for training: inventory, validation, deduplication,
-tagging, caption review, and reproducible image/sidecar exports. Originals stay
+tagging, caption review, and reproducible image/sidecar exports. Image files stay
 untouched. Images are processed locally.
 
-**Current implementation: inventory, validation, exact duplicates, local WD tagging,
-score caching, caption regeneration, and reports.** Reviewed training exports are pending.
+**Run `trainime` to tag a directory or remove its captions.** The menu is:
+
+```text
+[1] Tag Image Directory
+[2] Remove Tags
+[3] Help
+[0] Settings
+```
+
+Select an action, enter the image directory if one is not already set, and answer
+`Preview only? --dryrun [y/N]:`. Enter applies the action; `y` previews it. There
+are no model, threshold, batching, or export menus in this workflow.
+
+- **Tag:** includes subfolders; writes missing `.txt` captions beside images and
+  keeps existing captions. The model is downloaded automatically on first use.
+- **Remove:** backs up and removes `.txt` captions paired with images, including
+  manual captions. Unrelated text files and images remain. The result prints the
+  backup directory, which mirrors the original caption paths.
+- **Settings:** save a default directory or set a session directory. The session
+  directory takes priority and disappears on exit. A path entered during an action
+  is remembered for that session only. Blank clears a setting.
+- **Help:** `3` shows keys and commands. `q` exits; Ctrl+C cancels an action and
+  returns Home. Tab completes paths; quoted Explorer paths work.
+
+To install the command from this checkout, using the existing `uv`:
+
+```powershell
+uv tool install --python 3.12 --cache-dir .cache/uv '.[tag-cpu]'
+trainime
+```
+
+Direct commands use the same pipeline, with no prompts:
+
+```powershell
+trainime tag 'D:\images\anime' --dryrun
+trainime tag 'D:\images\anime'
+trainime remove 'D:\images\anime' --dryrun
+trainime remove 'D:\images\anime'
+```
+
+Omit the path to use the saved default. `--dryrun` performs inspection only: no
+model download, inference, caption changes, or report/cache writes. It reports
+eligible files; it cannot predict the model's tags. To retag existing captions,
+use Remove Tags, then Tag Image Directory.
+
+Settings, models, score cache, reports, and removed captions live under
+`%LOCALAPPDATA%\trainime` on Windows. `TRAINIME_HOME` overrides that directory.
+The image directory must be separate from this application-data tree. The command
+works outside this repository and does not depend on a local `config.toml`.
+
+**Current implementation:** interactive workflows, inventory, validation, exact
+duplicates, local WD tagging, score caching, caption regeneration, and reports.
+Reviewed training exports are pending.
 
 - [PLAN.md](PLAN.md): review of the rough notes, pipeline design, acceptance criteria.
 - [TODO.md](TODO.md): implementation status and next work.
 - [docs/TAGGING.md](docs/TAGGING.md): model research, tagging commands, and qualification limits.
-- [OVERVIEW.md](TAGGING-METHODS.md): preserved original notes and example snippets.
+- [docs/TRAINIME.md](docs/TRAINIME.md): workflow design, preservation, recovery, and evidence.
+- [TAGGING-METHODS.md](TAGGING-METHODS.md): original notes and example snippets.
 
-## Run on Windows
+## Technical stage commands
 
 Use the existing `uv` installation. The project selects Python 3.12 and keeps its
 environment and package cache inside the repository.
@@ -76,7 +128,7 @@ run IDs and timestamps are intentionally different. A scan is not a locked
 filesystem snapshot: stop other writers while scanning. A later stage must
 recheck source hashes before consuming files.
 
-Exit codes: `0` means the inventory completed, even if images were rejected;
+`dataset scan` exit codes: `0` means the inventory completed, even if images were rejected;
 `1` means it completed with file access/change errors; `2` means a configuration,
 directory access, or publication failure. No inventory result means training-ready.
 

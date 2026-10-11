@@ -4,11 +4,17 @@ build-backend = "hatchling.build"
 
 [project]
 name = "image-dataset-train"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local, source-preserving image dataset preparation"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["pillow>=12.0,<13"]
+dependencies = [
+    "pillow>=12.0,<13",
+    "prompt-toolkit>=3.0.52,<4",
+    "rich>=14,<15",
+    "platformdirs>=4,<5",
+    "filelock>=3.20,<4",
+]
 
 [project.optional-dependencies]
 tag-cpu = ["numpy>=2,<3", "onnxruntime>=1.20,<2", "huggingface-hub>=1,<2"]
@@ -16,6 +22,7 @@ tag-gpu = ["numpy>=2,<3", "onnxruntime-gpu>=1.20,<2", "huggingface-hub>=1,<2"]
 
 [project.scripts]
 dataset = "image_dataset_train.cli:main"
+trainime = "image_dataset_train.trainime:main"
 
 [dependency-groups]
 dev = ["pytest>=8.3,<10", "ruff>=0.12,<1", "onnx>=1.18,<2"]
@@ -32,7 +39,7 @@ testpaths = ["tests"]
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-extend-exclude = ["OVERVIEW.md"]
+extend-exclude = ["OVERVIEW.md", "TAGGING-METHODS.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

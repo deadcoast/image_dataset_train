@@ -2,10 +2,12 @@
 
 ## Current boundary
 
-M1 and the initial WD tagging stage are implemented. The pinned SwinV2 model has
+M1, WD tagging, and the `trainime` interactive directory workflow are implemented.
+The pinned SwinV2 model has
 been downloaded and CPU inference exercised on generated fixtures. No user dataset
 has been scanned or tagged, and no reviewed training export exists.
-`PLAN.md` is the working design. `OVERVIEW.md` remains historical source material.
+`PLAN.md` is the working design. `TAGGING-METHODS.md` contains the historical notes
+originally named `OVERVIEW.md`.
 
 ## M1: inventory and validation
 

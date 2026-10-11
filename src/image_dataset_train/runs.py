@@ -16,7 +16,7 @@ from PIL import __version__ as pillow_version
 
 from image_dataset_train import __version__
 from image_dataset_train.config import Config
-from image_dataset_train.inventory import scan, summarize
+from image_dataset_train.inventory import Record, scan, summarize
 
 
 def _json(value: object) -> str:
@@ -24,6 +24,11 @@ def _json(value: object) -> str:
 
 
 def run_scan(config: Config, progress: Callable[[int], None] | None = None) -> tuple[Path, dict]:
+    return publish_scan(config, scan(config.source, config.validation, progress))
+
+
+def publish_scan(config: Config, records: list[Record]) -> tuple[Path, dict]:
+    """Publish an already inspected inventory without decoding the collection twice."""
     source = config.source.resolve(strict=True)
     runs = config.runs.resolve()
     if not source.is_dir():
@@ -32,7 +37,6 @@ def run_scan(config: Config, progress: Callable[[int], None] | None = None) -> t
         raise ValueError("source and runs must be separate directory trees")
 
     started = datetime.now(UTC)
-    records = scan(source, config.validation, progress)
     summary = summarize(records)
     manifest = "".join(
         json.dumps(asdict(row), ensure_ascii=False, sort_keys=True) + "\n" for row in records
