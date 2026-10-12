@@ -45,9 +45,10 @@ trainime doctor --path 'D:\images\anime' --fix tf001
 
 Doctor checks dependencies, native CPU inference, saved settings, storage, command
 registration, model integrity, and cached score integrity. `--path` additionally
-checks image/caption associations. `--fix` performs supported repairs, including
-`tf001` when `--path` is supplied; `--fix tf001` selects only the stem repair and
-does not prepare a model or repair dependencies. A saved default can supply its path.
+checks image/caption associations. Bare `--fix` repairs the runtime and applies
+detected registered directory repairs when `--path` is supplied. Numeric or code
+selectors (for example `--fix 1` or `--fix tf001`) select directory fixes only and
+do not prepare a model or repair dependencies. A saved default can supply the path.
 `--dryrun` prevents writes and downloads, even with `--fix`. `--json` returns
 structured findings for scripts. Diagnosis remains accessible when the UI or native
 tagging libraries are broken because the startup and doctor code use the standard

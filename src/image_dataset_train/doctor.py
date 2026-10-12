@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from uuid import uuid4
 
+from image_dataset_train import terror
 from image_dataset_train.diagnostics import EventLog, app_home, diagnose, failure_text, redact
 
 PROBE = r"""
@@ -285,7 +286,12 @@ def _cache_check(home: Path, fix: bool) -> Check:
 
 
 def _path_check(
-    path: Path, home: Path, *, probe_write: bool = False, repair: bool = False, dryrun: bool = False
+    path: Path,
+    home: Path,
+    *,
+    probe_write: bool = False,
+    repair: str | bool = False,
+    dryrun: bool = False,
 ) -> Check:
     from image_dataset_train.config import ValidationConfig
     from image_dataset_train.operations import (
@@ -300,24 +306,26 @@ def _path_check(
     workflow_config(source, home)
     repaired = None
     if repair:
-        result = run_directory("fix", source, home, dryrun=dryrun)
+        result = run_directory("fix", source, home, dryrun=dryrun, fix=repair)
         repaired = result.repairs
         if result.errors:
             return Check(
                 "image_directory",
                 "error",
                 "; ".join(result.errors[:3]),
-                f'Retry: trainime fix "{source}"',
+                f'Retry: trainime fix "{source}"{terror.fix_arguments(repair)}',
             )
         if dryrun and repaired and repaired.actions:
-            renames = [a for a in repaired.actions if a["kind"] == "image"]
-            preview = "; ".join(f"{a['source']} -> {a['target']}" for a in renames[:3])
+            preview = "; ".join(
+                f"[{run.fix_code}] {a.get('description', str(a))}"
+                for run in repaired.runs
+                for a in run.actions[:3]
+            )
             return Check(
                 "image_directory",
                 "warning",
-                f"[te001] [tf001] Would rename {len(renames)} images; "
-                f"preserve ambiguous captions. {preview}",
-                f'Apply: trainime doctor --path "{source}" --fix tf001',
+                f"{len(repaired.actions)} planned repair actions. {preview}",
+                f'Apply: trainime doctor --path "{source}"{terror.fix_arguments(repair)}',
             )
     if probe_write:
         with tempfile.TemporaryFile(dir=source):
@@ -331,16 +339,21 @@ def _path_check(
             "image_directory",
             "error",
             f"[{diagnose(problems[0].reason).code}] {len(problems)} association issues: {details}",
-            f'[tf001] Apply: trainime doctor --path "{source}" --fix tf001'
-            if problems[0].error_code == "te001"
+            f'[{problems[0].fix_code}] Apply: trainime doctor --path "{source}"'
+            + terror.fix_arguments(problems[0].fix_code)
+            if problems[0].fix_code
             else diagnose(problems[0].reason).fix,
         )
-    if repaired and repaired.actions:
+    if repaired and repaired.runs:
+        details = "; ".join(
+            f"[{run.fix_code}] " + ", ".join(f"{n} {label}" for label, n in run.metrics.items())
+            for run in repaired.runs
+        )
         return Check(
             "image_directory",
             "fixed",
-            f"[tf001] Renamed {repaired.renamed} images; preserved {repaired.archived} captions. "
-            f"Verified unique associations. Recovery: {', '.join(map(str, repaired.reports))}",
+            f"{details}. Directory rechecked: no association issues. "
+            f"Recovery: {', '.join(map(str, repaired.reports))}",
         )
     return Check(
         "image_directory", "ok", f"Readable: {source}; {len(items)} image associations checked."
@@ -506,37 +519,52 @@ def main(argv: list[str]) -> int:
         "--fix",
         nargs="?",
         const="all",
-        choices=["all", "tf001", "te001"],
-        help="repair runtime/settings/cache and --path collisions; tf001 selects stem repair only",
+        action="append",
+        type=terror.selector_argument,
+        metavar="N[,N...]",
+        help="repair runtime and detected --path errors; numbers select registered directory fixes",
     )
     parser.add_argument(
         "--dryrun", "--dry-run", action="store_true", help="diagnose without writes or downloads"
     )
     parser.add_argument("--json", action="store_true", help="machine-readable findings")
     parser.add_argument(
-        "--path", type=Path, help="inspect a directory; --fix applies tf001 stem repair there"
+        "--path",
+        type=Path,
+        help="inspect a directory; --fix applies its detected registered repairs",
     )
     parser.add_argument("--runtime-only", action="store_true", help=argparse.SUPPRESS)
-    args = parser.parse_args(argv[1:])
+    args = parser.parse_args(terror.normalize_fix_argv(argv[1:]))
+    selection = terror.normalize_selector(args.fix)
     home = app_home()
     log = EventLog(home, enabled=not args.dryrun)
     try:
-        if args.fix in {"tf001", "te001"}:
+        if selection and selection != "all":
             from image_dataset_train.preferences import Preferences
 
             selected = args.path or Preferences.load(home).default_path
             if selected is None:
-                parser.error('Supply --path "D:\\images" for tf001, or save a default in Settings.')
-            checks = [_path_check(selected, home, repair=True, dryrun=args.dryrun)]
+                parser.error(
+                    'Supply --path "D:\\images" for selected repairs, '
+                    "or save a default in Settings."
+                )
+            checks = [_path_check(selected, home, repair=selection, dryrun=args.dryrun)]
         else:
             checks = check_all(
                 home,
-                fix=bool(args.fix) and not args.dryrun,
+                fix=bool(selection) and not args.dryrun,
                 runtime_only=args.runtime_only,
-                path=args.path,
+                path=None if selection and args.dryrun else args.path,
             )
+            if selection and args.dryrun and args.path and not args.runtime_only:
+                checks.append(_path_check(args.path, home, repair=selection, dryrun=True))
         result = [asdict(check) for check in checks]
-        report = log.event("doctor", fix=args.fix and not args.dryrun, checks=result)
+        report = log.event(
+            "doctor",
+            fix=bool(selection) and not args.dryrun,
+            fix_selection=selection,
+            checks=result,
+        )
         if args.json:
             print(json.dumps({"checks": result, "log": str(report) if report else None}, indent=2))
         else:

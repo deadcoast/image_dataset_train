@@ -15,8 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from image_dataset_train import __version__
-from image_dataset_train.terror import TERROR, TERROR_FIX
+from image_dataset_train import __version__, terror
 
 
 def app_home() -> Path:
@@ -136,13 +135,16 @@ def diagnose(error: BaseException | str) -> Diagnosis:
             "The saved settings cannot be read.",
             "Run: trainime doctor --fix. It preserves the broken settings before resetting them.",
         )
-    if any(s in lower for s in ("same-stem", "ambiguous", "collision", "[te001]", "[tf001]")):
+    rule = terror.REGISTRY.diagnose(text)
+    if rule:
+        fixes = terror.REGISTRY.for_messages([text])
+        codes = ",".join(fix.code for fix in fixes)
         return Diagnosis(
-            "te001",
-            TERROR["te001"],
-            f"[tf001] {TERROR_FIX['tf001']} Apply: trainime tag <directory> --fix tf001. "
-            "Add --dryrun to preview renames and caption recovery without changes.",
-            "tf001",
+            rule.code,
+            rule.description,
+            f"[{codes}] Apply: trainime tag <directory> --fix {codes}. "
+            "Add --dryrun to preview repairs without changes.",
+            codes,
         )
     if "caption" in lower and "not a regular file" in lower:
         return Diagnosis(

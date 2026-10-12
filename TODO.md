@@ -1,5 +1,34 @@
 # Implementation status
 
+## Trainime 0.5.1: numeric repair registry and dispatch
+
+- [x] Replace the 0.5.0 single-fix CLI/doctor branches with registered numeric
+  error and fix definitions, explicit one-to-many mappings, and shared dispatch.
+- [x] Bare `--fix` discovers applicable registered handlers; numeric IDs, padded
+  IDs, error/fix codes, comma selections, and repeated flags select handlers.
+  Selection validates before mutation, deduplicates, and sorts numerically.
+- [x] Menu offers, command echoes, diagnostics, operation receipts, result
+  metrics, dry-run projections, and pending-repair checks use the registry.
+- [x] Failures stop subsequent mutations; interrupted unselected fixes identify
+  their resume codes. Collision repair retains its existing recovery behavior.
+
+Verification: **204 passed, 2 skipped**; `.cache/registry-full.xml` and
+`.cache/pytest-registry-full`. Ruff lint and formatting pass. The Windows skips
+are unchanged from 0.5.0 below. Additional test-only handlers prove multiple
+dispatch, numeric ordering, IDs beyond three digits, differing error/fix IDs,
+one-to-many mappings, conditional menu choices, and failure isolation. `tf001`
+is the only production directory repair currently implemented.
+
+Installed 0.5.1 through `install.cmd`; every installed source module matches the
+checkout. Installed-command checks cover selector aliases/repetition, bare flags
+before subcommands/paths, invalid codes, read-only previews, actual SwinV2 CPU
+tagging after collision repair, byte/caption preservation, repeat runs, and doctor.
+The installed dispatcher also ran two additional test-only registered handlers
+without changing CLI code. No personal dataset or personal error logs were used.
+Evidence: `.cache/registry-installed/027500e52b65451fa59ee2dd3e9553a3/verification.json`
+and adjacent command transcripts. Installer receipt:
+`install-20261012T011634959Z-111187f7.log` under the application log directory.
+
 ## Trainime 0.5.0: executable te001 / tf001 repair
 
 - [x] Stable TERROR/TERROR_FIX definitions, structured error/fix codes, and a

@@ -4,6 +4,7 @@ Designed and implemented 2026-10-11. The initial workflow is version 0.3.0;
 version 0.4.0 adds the [installer, diagnostics, and repair system](INSTALLATION.md).
 Version 0.4.1 refines the terminal presentation and makes dry-run eligibility explicit.
 Version 0.5.0 adds executable `te001` / `tf001` collision repair.
+Version 0.5.1 replaces its single-fix dispatch with a numeric error/fix registry.
 
 ## Interaction
 
@@ -14,10 +15,11 @@ session. Both actions print the equivalent direct command. Blank answers to the
 preview question apply the operation; `y` or `--dryrun` previews. Ctrl+C cancels
 back to Home, including from Settings. Ctrl+D exits at a prompt. Nothing asks
 whether to continue to another stage.
-When `te001` occurs, the menu offers one conditional `Apply tf001? --fix [y/N]:`
-question. Accepting applies the repair and continues the selected action. There
-are no additional normal-path menus. Starting with `trainime --fix` opts into the
-repair for menu actions; direct commands accept `--fix` or `--fix tf001`.
+When a registered error occurs, the menu offers one conditional repair question
+with its mapped fix codes, for example `Apply tf001? --fix [y/N]:`. Accepting applies
+those repairs and continues the selected action. There are no additional normal-path
+menus. Starting with `trainime --fix` opts into detected registered repairs for menu
+actions. Direct commands also accept numeric or error/fix code selections.
 
 Settings exposes two paths and Back. It stores only the default path. Session
 state and input history stay in memory. Paths accept quotes, spaces, Unicode,
@@ -92,21 +94,49 @@ not establish training acceptance or anime tagging accuracy.
 
 ## Tagging error repairs
 
-The definitions live in `src/image_dataset_train/terror.py`:
+The numeric definitions and explicit error-to-fix mappings live in
+`src/image_dataset_train/terror.py`. The current production entry is:
 
 ```json
 {
-  "TERROR": {"te001": "Same-stem image or caption collision."},
-  "TERROR_FIX": {"tf001": "Give each image a unique filename stem."},
-  "FIX_FOR_ERROR": {"te001": "tf001"}
+  "te001": "Same-stem image or caption collision.",
+  "tf001": "Give each image a unique filename stem.",
+  "fixes_for_error": {"te001": ["tf001"]}
 }
 ```
 
-The same repair engine serves `trainime tag <path> --fix tf001`,
-`trainime remove <path> --fix tf001`, `trainime fix <path>`, the menu's conditional
-fix option, and `trainime doctor --path <path> --fix tf001`. `te001` is also accepted
-as the selector. Unknown codes are rejected rather than silently running another fix.
-All these commands accept `--dryrun`, which previews without writes or downloads.
+This JSON illustrates the definitions, not an external configuration file.
+
+The shared dispatcher serves `trainime tag <path> --fix`,
+`trainime remove <path> --fix`, `trainime fix <path>`, the menu's conditional fix
+option, and `trainime doctor --path <path> --fix`. Selection rules:
+
+- Bare `--fix` or `--fix all` detects and applies every applicable registered fix.
+  `trainime fix <path>` uses this selection by default.
+- `--fix 1`, `--fix 001`, and `--fix tf001` select fix number 1.
+- `--fix te001` follows the error's registered mapping. Error and fix numbers are
+  independent; an error can require multiple fixes.
+- Comma-separated selectors and repeated `--fix` options combine selections.
+  The dispatcher deduplicates them and executes in numeric order.
+- Every selector is validated before mutation. Unknown or malformed codes fail
+  with the registered choices. IDs are positive integers with at least three
+  digits in displayed codes, not a three-digit limit.
+- All these commands accept `--dryrun`, which previews without writes or downloads.
+  The printed apply command retains the selected fixes.
+
+Only `tf001` is currently a production directory repair. Adding a repair means
+registering a `FixRule` with a number, description, detector, handler, and optional
+pending-recovery detector, plus its `ErrorRule` mappings. References can be lazy
+`module:function` strings; diagnostics remain usable without the tagging runtime.
+CLI parsing, menu choices, doctor, and result rendering need no per-fix branches.
+Handlers return `RepairResult` actions, metrics, errors, recovery report paths,
+and optional per-image dry-run projections. The caller holds the source lock;
+handlers own their saved intent and recovery. A handler failure stops later fixes
+and tagging/removal; earlier completed repairs remain recorded. Rerunning detects
+remaining work. Unselected unfinished repairs block tagging/removal and identify
+the required resume codes.
+
+### tf001: same-stem repair
 
 The rule applies recursively to every same-stem group, with case-folded comparison
 inside each directory. Each regular image gets `<stem>-<extension>` with a numeric
@@ -131,7 +161,8 @@ Tag/remove without `--fix` will not proceed through an unfinished repair. Comple
 groups are not renamed again. Repair and tagging share the source-directory lock.
 
 Output and structured error events carry `[te001]` and `[tf001]`; tag-operation
-receipts link their repair reports. Repair results show counts and recovery paths.
+receipts store a list of dispatched repairs with their codes, metrics, errors,
+and recovery reports. Repair results show counts and recovery paths.
 These journals provide process-interruption recovery, not filesystem-wide atomicity
 or a guarantee against hardware failure or hostile external file changes.
 Completed inventory/tag reports retry brief Windows sharing locks with bounded

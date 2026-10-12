@@ -12,23 +12,20 @@ import os
 import re
 import shutil
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
 from image_dataset_train.diagnostics import EventLog, atomic_json
 from image_dataset_train.inventory import IMAGE_EXTENSIONS, _signature, _walk, file_sha256
+from image_dataset_train.repairs import RepairResult
 
 
 @dataclass
-class FixResult:
-    actions: list[dict] = field(default_factory=list)
+class FixResult(RepairResult):
     renamed: int = 0
     archived: int = 0
-    errors: list[str] = field(default_factory=list)
-    reports: list[Path] = field(default_factory=list)
-    log: Path | None = None
 
 
 def _name(image: Path, reserved: set[str]) -> str:
@@ -304,7 +301,7 @@ def _apply_action(source: Path, report: Path, plan: dict, action: dict) -> bool:
     return True
 
 
-def repair_collisions(source: Path, home: Path, *, dryrun: bool, progress) -> FixResult:
+def _repair_collisions(source: Path, home: Path, *, dryrun: bool, progress) -> FixResult:
     result = FixResult()
     log = EventLog(home, enabled=not dryrun)
     pending = pending_repairs(source, home)
@@ -399,4 +396,27 @@ def repair_collisions(source: Path, home: Path, *, dryrun: bool, progress) -> Fi
             "fix_planned", error_code="te001", fix_code="tf001", source=source, report=report
         )
         execute(report, plan)
+    return result
+
+
+def detect_collisions(source: Path, home: Path) -> bool:
+    if pending_repairs(source, home):
+        return True
+    groups, errors = _plan(source)
+    return bool(groups or errors)
+
+
+def repair_collisions(source: Path, home: Path, *, dryrun: bool, progress) -> RepairResult:
+    result = _repair_collisions(source, home, dryrun=dryrun, progress=progress)
+    result.metrics = {"images renamed": result.renamed, "captions preserved": result.archived}
+    for action in result.actions:
+        if action["kind"] == "image":
+            action["description"] = f"Rename {action['source']} → {action['target']}"
+            result.projections[action["source"]] = {
+                "tag": "ready",
+                "remove": "missing",
+                "caption": Path(action["target"]).with_suffix(".txt").as_posix(),
+            }
+        else:
+            action["description"] = f"Preserve ambiguous caption in recovery: {action['source']}"
     return result

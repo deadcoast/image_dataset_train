@@ -36,8 +36,8 @@ def test_general_tf001_preserves_bytes_resolves_stems_and_is_idempotent(tmp_path
     (source / "already-tagged.txt").write_bytes(b"keep manual")
     before = snapshot(source)
     result = run_directory("fix", source, home)
-    assert result.exit_code == 0 and result.repairs.renamed == 4
-    assert result.repairs.archived == 1
+    assert result.exit_code == 0 and result.repairs.runs[0].metrics["images renamed"] == 4
+    assert result.repairs.runs[0].metrics["captions preserved"] == 1
     assert not (source / f"{stem}.txt").exists()
     report = result.repairs.reports[0]
     assert (report / "captions" / f"{stem}.txt").read_bytes() == b"ambiguous manual caption\r\n"
@@ -83,7 +83,7 @@ def test_fix_dryrun_has_no_writes_or_downloads(tmp_path, monkeypatch, action):
     monkeypatch.setattr(operations, "fetch_bundle", lambda *a, **kw: pytest.fail("download"))
     result = run_directory(action, source, home, dryrun=True, fix="tf001")
     assert len(result.repairs.actions) == 3
-    assert result.repairs.renamed == 0 and result.repairs.archived == 0
+    assert result.repairs.runs[0].metrics == {"images renamed": 0, "captions preserved": 0}
     assert result.exit_code == 0
     assert snapshot(source) == before and not home.exists()
 
@@ -120,7 +120,7 @@ def test_case_variant_image_collision(tmp_path):
     source, home = collision(tmp_path, "CaSe", caption=False)
     (source / "CaSe.png").rename(source / "case.PNG")
     result = run_directory("fix", source, home)
-    assert result.exit_code == 0 and result.repairs.renamed == 2
+    assert result.exit_code == 0 and result.repairs.runs[0].metrics["images renamed"] == 2
     assert (source / "CaSe-jpg.jpg").exists() and (source / "case-png.PNG").exists()
 
 
@@ -133,7 +133,7 @@ def test_multiple_case_variant_captions_are_all_preserved(tmp_path):
     (source / "a.txt").write_bytes(b"first")
     (source / "A.TXT").write_bytes(b"second")
     result = run_directory("fix", source, home)
-    assert result.exit_code == 0 and result.repairs.archived == 2
+    assert result.exit_code == 0 and result.repairs.runs[0].metrics["captions preserved"] == 2
     recovery = result.repairs.reports[0] / "captions"
     assert (recovery / "a.txt").read_bytes() == b"first"
     assert (recovery / "A.TXT").read_bytes() == b"second"
@@ -252,7 +252,7 @@ def test_doctor_targeted_fix_and_preview_do_not_require_model(tmp_path, monkeypa
     assert doctor.main(args) == 0
     result = json.loads(capsys.readouterr().out)
     assert result["checks"][0]["status"] == "fixed"
-    assert "Verified unique associations" in result["checks"][0]["detail"]
+    assert "Directory rechecked: no association issues" in result["checks"][0]["detail"]
 
 
 def test_interactive_fix_option_only_after_collision_and_retains_home_menu(tmp_path):
@@ -276,7 +276,7 @@ def test_image_or_caption_directory_is_not_moved_as_a_file(tmp_path):
     (source / "arbitrary_42.txt").mkdir()
     before = snapshot(source)
     result = run_directory("fix", source, home)
-    assert result.exit_code == 0 and result.repairs.renamed == 2
+    assert result.exit_code == 0 and result.repairs.runs[0].metrics["images renamed"] == 2
     assert sorted(snapshot(source).values()) == sorted(before.values())
     assert (source / "arbitrary_42.txt").is_dir()
 
@@ -288,7 +288,7 @@ def test_dryrun_apply_command_keeps_fix_flag(tmp_path, monkeypatch, capsys):
     text = capsys.readouterr().out
     assert "2 images" in text
     apply_command = text.split("Run to apply")[-1]
-    assert "--fix tf001" in apply_command and "--dryrun" not in apply_command
+    assert "--fix" in apply_command and "--dryrun" not in apply_command
 
 
 def test_resume_handles_rename_before_journal_update(tmp_path, monkeypatch):
@@ -314,7 +314,7 @@ def test_resume_handles_rename_before_journal_update(tmp_path, monkeypatch):
 def test_long_names_leave_room_for_unique_suffix(tmp_path):
     source, home = collision(tmp_path, "a" * 151, caption=False)
     result = run_directory("fix", source, home)
-    assert result.exit_code == 0 and result.repairs.renamed == 2
+    assert result.exit_code == 0 and result.repairs.runs[0].metrics["images renamed"] == 2
     assert len({p.stem.casefold() for p in source.iterdir()}) == 2
     assert all(len(p.name.encode()) < 200 for p in source.iterdir())
 

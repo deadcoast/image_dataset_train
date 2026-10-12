@@ -18,7 +18,7 @@ from rich.table import Table
 from rich.text import Text
 from rich.theme import Theme
 
-from image_dataset_train import __version__
+from image_dataset_train import __version__, terror
 from image_dataset_train.diagnostics import EventLog, diagnose, failure_text
 from image_dataset_train.operations import Result, run_directory
 from image_dataset_train.preferences import Preferences, app_home, image_directory
@@ -42,8 +42,9 @@ To retag: Remove Tags, then Tag Image Directory.
 
 trainime doctor --fix   Diagnose and repair installation, settings, and caches.
 trainime logs          Show log locations and the latest error details.
-trainime tag "D:\\images" --fix tf001   Repair te001 collisions, then tag.
-Add --dryrun to preview. Ambiguous captions are preserved in recovery.
+trainime tag "D:\\images" --fix       Apply registered fixes for detected errors, then tag.
+--fix N selects a fix number; use comma-separated numbers to select several.
+Add --dryrun to preview repairs without changing files.
 """
 
 
@@ -51,9 +52,7 @@ def command_text(action: str, source: Path, dryrun: bool, fix: str | bool = Fals
     text = str(source)
     quoted = "'" + text.replace("'", "''") + "'" if os.name == "nt" else shlex.quote(text)
     return (
-        f"trainime {action} {quoted}"
-        + (" --fix tf001" if fix else "")
-        + (" --dryrun" if dryrun else "")
+        f"trainime {action} {quoted}" + terror.fix_arguments(fix) + (" --dryrun" if dryrun else "")
     )
 
 
@@ -169,7 +168,9 @@ class Terminal:
         self.heading(
             ("Dry run" if dryrun else "Run")
             + " · "
-            + {"tag": "Tag images", "remove": "Remove captions", "fix": "Fix te001"}[action]
+            + {"tag": "Tag images", "remove": "Remove captions", "fix": "Fix detected errors"}[
+                action
+            ]
         )
         self.say(command_text(action, source, dryrun, fix), style="dim", literal=True)
         self.say(
@@ -177,7 +178,7 @@ class Terminal:
             if dryrun
             else "Including subfolders · "
             + (
-                "tf001 renames collisions and preserves ambiguous captions in recovery"
+                "apply matching registered repairs"
                 if fix or action == "fix"
                 else "existing captions are kept"
                 if action == "tag"
@@ -225,34 +226,38 @@ class Terminal:
 
     def result(self, result: Result) -> None:
         if result.repairs is not None:
-            repairs = result.repairs
-            renames = [a for a in repairs.actions if a["kind"] == "image"]
-            captions = [a for a in repairs.actions if a["kind"] == "caption"]
-            self.heading("[tf001] " + ("Repair preview" if result.dryrun else "Repair results"))
-            if result.dryrun:
-                self.say(
-                    f"Would rename {len(renames):,} images and preserve "
-                    f"{len(captions):,} ambiguous captions in recovery."
+            for repair in result.repairs.runs:
+                self.heading(
+                    f"[{repair.fix_code}] "
+                    + ("Repair preview" if result.dryrun else "Repair results")
                 )
-                for action in renames[:3]:
-                    self.say(f"  {action['source']} → {action['target']}")
-                if len(renames) > 3:
-                    self.say(f"  …and {len(renames) - 3:,} more renames.")
-                self.say("No files changed.", style="dim")
-            else:
-                self.say(
-                    f"Renamed {repairs.renamed:,} images; preserved "
-                    f"{repairs.archived:,} ambiguous captions in recovery."
-                )
-            for report in repairs.reports:
-                self.path("tf001 journal / caption recovery", report)
+                self.say(repair.description)
+                if result.dryrun:
+                    for action in repair.actions[:3]:
+                        self.say("  " + action.get("description", str(action)))
+                    if len(repair.actions) > 3:
+                        self.say(f"  …and {len(repair.actions) - 3:,} more actions.")
+                    self.say("No files changed.", style="dim")
+                else:
+                    self.say(
+                        "; ".join(f"{value:,} {label}" for label, value in repair.metrics.items())
+                        or "No changes needed."
+                    )
+                for report in repair.reports:
+                    self.path(f"{repair.fix_code} journal / recovery", report)
+            if not result.repairs.runs:
+                self.say("No applicable registered repairs.", style="dim")
         if result.action == "fix":
             for error in result.errors[:3]:
                 self.say(error, style="red")
             if result.errors and result.log:
                 self.path("Error log", result.log)
             if result.dryrun and result.repairs and result.repairs.actions:
-                self.say(command_text("fix", result.source, False), style="cyan", literal=True)
+                self.say(
+                    command_text("fix", result.source, False, result.fix_selection),
+                    style="cyan",
+                    literal=True,
+                )
             return
         counts = result.counts
         skipped = counts["blocked"] + counts["rejected"]
@@ -346,9 +351,9 @@ class Terminal:
             for _, reason in issues[:3]:
                 diagnosis = diagnose(reason)
                 fix = diagnosis.fix.removeprefix("Run: ")
-                if diagnosis.code == "te001":
-                    fix = "[tf001] Apply: " + command_text(
-                        result.action, result.source, False, True
+                if diagnosis.fix_code:
+                    fix = f"[{diagnosis.fix_code}] Apply: " + command_text(
+                        result.action, result.source, False, diagnosis.fix_code
                     )
                 if diagnosis.code == "UNEXPECTED_ERROR" and not result.log:
                     fix = "Retry the action. If it still fails, run trainime doctor."
@@ -379,7 +384,7 @@ class Terminal:
             self.say()
             self.say("Run to apply", style="bold")
             self.say(
-                command_text(result.action, result.source, False, result.repairs is not None),
+                command_text(result.action, result.source, False, result.fix_selection),
                 style="cyan",
                 literal=True,
             )
@@ -448,28 +453,30 @@ class App:
         options = {"fix": self.fix} if self.fix else {}
         result = self.worker(action, source, self.preferences.home, dryrun, **options)
         self.terminal.result(result)
-        if (
-            not dryrun
-            and not self.fix
-            and (
-                any(i.error_code == "te001" for i in result.items)
-                or any(diagnose(error).code == "te001" for error in result.errors)
-            )
-        ):
-            self.terminal.say(
-                "[tf001] Rename colliding images; preserve ambiguous captions in recovery."
-            )
+        available = terror.REGISTRY.select(
+            [rule.code for rule in terror.REGISTRY.for_errors(i.error_code for i in result.items)]
+            + [rule.code for rule in terror.REGISTRY.for_messages(result.errors)]
+        )
+        if not dryrun and not self.fix and available:
+            codes = ",".join(rule.code for rule in available)
+            for rule in available:
+                self.terminal.say(f"[{rule.code}] {rule.description}")
             while True:
-                answer = self.terminal.ask("Apply tf001? --fix [y/N]: ").strip().lower()
+                answer = self.terminal.ask(f"Apply {codes}? --fix [y/N]: ").strip().lower()
                 if answer in {"", "n", "no", "q"}:
                     break
-                if answer in {"y", "yes", "--fix", "--fix tf001", "tf001"}:
-                    repaired = self.worker(
-                        action, source, self.preferences.home, False, fix="tf001"
+                try:
+                    selected = (
+                        codes
+                        if answer in {"y", "yes", "--fix"}
+                        else terror.normalize_selector(answer.removeprefix("--fix "))
                     )
-                    self.terminal.result(repaired)
-                    break
-                self.terminal.say("Enter y to apply --fix tf001, or Enter to keep files unchanged.")
+                except ValueError as exc:
+                    self.terminal.say(str(exc))
+                    continue
+                repaired = self.worker(action, source, self.preferences.home, False, fix=selected)
+                self.terminal.result(repaired)
+                break
 
     def settings(self) -> None:
         while True:
@@ -555,9 +562,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--fix",
         nargs="?",
-        const="tf001",
-        choices=["tf001", "te001"],
-        help="apply tf001 collision repair during menu actions",
+        const="all",
+        action="append",
+        type=terror.selector_argument,
+        metavar="N[,N...]",
+        help="apply detected registered fixes; optionally select fix numbers or error/fix codes",
     )
     parser.add_argument(
         "--dryrun",
@@ -569,17 +578,19 @@ def _parser() -> argparse.ArgumentParser:
     for name, help_text in (
         ("tag", "write missing image captions"),
         ("remove", "back up and remove matching image captions"),
-        ("fix", "apply tf001 collision repair without tagging"),
+        ("fix", "apply detected registered repairs without tagging"),
     ):
         command = sub.add_parser(name, help=help_text, description=help_text.capitalize() + ".")
         command.add_argument("path", nargs="?", help="image directory; defaults to saved path")
         command.add_argument(
             "--fix",
             nargs="?",
-            const="tf001",
-            choices=["tf001", "te001"],
+            const="all",
+            action="append",
+            type=terror.selector_argument,
+            metavar="N[,N...]",
             dest="action_fix",
-            help="repair te001 with tf001 before this action",
+            help="apply detected registered fixes; optionally select numbers or error/fix codes",
         )
         command.add_argument(
             "--dryrun",
@@ -600,7 +611,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         from image_dataset_train.doctor import main as doctor_main
 
         return doctor_main(arguments)
-    args = _parser().parse_args(arguments)
+    args = _parser().parse_args(terror.normalize_fix_argv(arguments))
     terminal = Terminal()
     terminal.dryrun = args.dryrun or getattr(args, "action_dryrun", False)
     if args.action == "help":
@@ -615,7 +626,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             preferences = Preferences(app_home())
             terminal.say("Continuing without a saved default. The original settings are kept.")
         if args.action is None:
-            return App(preferences, terminal, dryrun=args.dryrun, fix=args.fix).run()
+            return App(
+                preferences, terminal, dryrun=args.dryrun, fix=terror.normalize_selector(args.fix)
+            ).run()
         source = image_directory(args.path) if args.path else preferences.default_path
         if source is None:
             terminal.say(
@@ -629,7 +642,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             source,
             preferences.home,
             args.dryrun or args.action_dryrun,
-            fix=args.fix or args.action_fix,
+            fix=terror.normalize_selector([*(args.fix or []), *(args.action_fix or [])]),
         )
         terminal.result(result)
         return result.exit_code
