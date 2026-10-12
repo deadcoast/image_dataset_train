@@ -3,6 +3,10 @@
 Reviewed: 2026-10-11. Status: intake, local tagging, and Trainime directory actions implemented;
 similarity review, durable overrides, and training export remain pending.
 
+Installation and operational recovery are implemented in 0.4.0:
+[install.cmd](install.cmd) owns setup, and [the recovery contract](docs/INSTALLATION.md)
+defines logs, diagnosis, automatic repairs, and actionable fixes for remaining failures.
+
 ## Purpose and scope
 
 Turn a local collection of anime images into a traceable, reviewed dataset of

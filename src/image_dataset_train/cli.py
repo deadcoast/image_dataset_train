@@ -9,6 +9,7 @@ from pathlib import Path
 
 from image_dataset_train import __version__
 from image_dataset_train.config import load_config
+from image_dataset_train.diagnostics import EventLog, app_home, failure_text
 from image_dataset_train.runs import run_scan
 
 
@@ -113,12 +114,15 @@ def main(argv: list[str] | None = None) -> int:
         directory, summary = run_scan(config, progress)
     except ImportError as exc:
         print(
-            f"error: tagging dependencies missing; use --extra tag-cpu or --extra tag-gpu ({exc})",
+            "error: " + failure_text(exc, EventLog(app_home()), action=args.command),
             file=sys.stderr,
         )
         return 2
     except (OSError, ValueError, RuntimeError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        print(
+            "error: " + failure_text(exc, EventLog(app_home()), action=args.command),
+            file=sys.stderr,
+        )
         return 2
     print(f"Inventory: {directory}")
     print(f"Files: {summary['files_seen']}; images: {summary['images_seen']}")

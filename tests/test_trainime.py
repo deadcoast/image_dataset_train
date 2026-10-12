@@ -273,7 +273,9 @@ def test_home_uses_exact_choices_and_only_essential_questions(collection):
 
     preferences = Preferences(home)
     assert App(preferences, terminal, worker).run() == 0
-    assert HOME_MENU in terminal.output.getvalue()
+    menu = terminal.output.getvalue()
+    positions = [menu.index(choice) for choice in HOME_MENU.splitlines()]
+    assert positions == sorted(positions)
     assert calls == [("tag", source, True), ("remove", source, False)]
     assert terminal.prompts == [
         "> ",

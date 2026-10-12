@@ -1,6 +1,8 @@
 # Trainime workflow contract
 
-Designed and implemented 2026-10-11, version 0.3.0.
+Designed and implemented 2026-10-11. The initial workflow is version 0.3.0;
+version 0.4.0 adds the [installer, diagnostics, and repair system](INSTALLATION.md).
+Version 0.4.1 refines the terminal presentation and makes dry-run eligibility explicit.
 
 ## Interaction
 
@@ -22,6 +24,31 @@ The CLI uses standard scrolling output with one active progress line. Redirected
 output receives periodic text progress. Summaries show counts, at most three
 issues, and the report/backup path. Detailed data stays in files. The root
 `--dryrun` also makes interactive actions previews and prevents saving settings.
+
+### Terminal presentation
+
+Home uses aligned action labels and short descriptions at 72 columns and wider;
+narrower terminals keep the same four choices without the descriptions. The active
+session/default directory is visible before selecting an action. Settings separates
+each path from its persistence explanation. There is no screen clearing or alternate
+screen; previous results remain in scrollback.
+
+Dry-run headlines say `--dryrun found N images that can be serviced for tags`
+(or `N captions that can be removed after backup`). Both `can` and the eligible
+count are green. A separate tally distinguishes scanned images, eligible work,
+existing captions kept, skipped items, and errors. A preview explicitly says no
+files changed and prints a copyable command to apply eligible work. Actual runs
+report captions written/removed, including zero-work and partial-result states.
+
+Use cyan for navigation, commands, and preview headings; green for eligibility and
+completed work; amber for skips/review; red for failure. Text labels carry the same
+meaning without color. Honor `NO_COLOR` and terminal color capabilities. Paths and
+commands stay literal and copyable, including brackets and spaces.
+
+Progress uses one transient line with elapsed time. Inspection and inference pulse
+while totals are unknown; caption writing/removal shows actual completed/total
+counts and a bar. Below 72 columns the bar is omitted. Redirected output receives
+bounded plain progress messages, without terminal animation.
 
 These choices apply the guidance on concise prompts, discoverable commands,
 progress, and cancellation in the [Command Line Interface Guidelines](https://clig.dev/).

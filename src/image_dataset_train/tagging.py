@@ -193,6 +193,7 @@ def tag_inventory(
     progress: Callable[[str], None] | None = None,
     *,
     only_sources: set[str] | None = None,
+    repair_cache: bool = False,
 ) -> tuple[Path, dict]:
     started = datetime.now(UTC).isoformat()
     inventory_meta, records, inventory_hash = _read_inventory(inventory)
@@ -250,7 +251,7 @@ def tag_inventory(
             if digest in vectors or digest in pending:
                 summary["duplicate_score_reuse"] += 1
             else:
-                cached = cache.get(digest)
+                cached = cache.get(digest, repair=repair_cache)
                 if cached is not None:
                     vectors[digest] = cached
                     summary["cached_images"] += 1

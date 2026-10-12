@@ -1,5 +1,83 @@
 # Implementation status
 
+## Trainime 0.4.1: terminal output polish
+
+- [x] Dry runs explicitly report images that **can** be serviced for tags (or
+  captions that can be removed), with green eligibility wording and counts.
+- [x] Scanned/eligible/kept/skipped/error totals, explicit no-change preview
+  wording, and a copyable command to apply the action.
+- [x] Consistent cyan navigation, green success, amber attention, red failure;
+  aligned Home descriptions, visible active path, clearer Settings and Help.
+- [x] One progress line with elapsed time and actual caption completion counts;
+  compact narrow-terminal layout, plain redirected output, and `NO_COLOR` support.
+- [x] Readable image-decoder failures with a re-export instruction instead of a
+  generic runtime-repair suggestion. Existing detailed operation data is retained.
+- [x] Installed 0.4.1 through the supported installer. The normal user command
+  resolves to `C:\Users\ryanf\.local\bin\trainime.exe`.
+
+Verification on 2026-10-11: **66 existing workflow/diagnostics checks passed**;
+Ruff lint/format and dependency-lock checks passed. Inspected 40/96-column color
+renders and exercised the installed Home/Settings prompts in a Windows terminal.
+Installed tag/remove previews on generated fixtures reported the correct eligible,
+kept, and skipped counts, preserved every input byte, created no app-data files,
+and emitted plain redirected text. Evidence: `.cache/cli-polish/`.
+No personal image directory was processed for this presentation change.
+
+## Trainime 0.4.0: installer, logs, and repair
+
+- [x] `install.cmd` / `install.ps1` is the supported installation entry point.
+  It locates its own checkout, obtains verified uv and Python when necessary,
+  stages and probes a native inference runtime, installs the command, registers
+  user PATH, and retains checksummed repair artifacts and an installation receipt.
+- [x] Existing and missing/stale dependency locks, paths with spaces, inherited
+  PowerShell 7 module paths in PowerShell 5.1, repeated installs, and offline repair.
+  Stale locks are refreshed in an isolated copy; the source lock is preserved.
+- [x] Structured operational logs, separate errors with full tracebacks, stable
+  diagnosis codes, per-process rotation, fallback logging, common credential
+  redaction, installer stdout/stderr/exit logs, and `trainime logs`.
+- [x] Dependency-free startup/doctor, child-process native inference checks,
+  `trainime doctor --fix`, settings recovery, damaged-model preservation/refetch,
+  damaged-score preservation/recomputation, and data-specific recovery instructions.
+- [x] A running Windows doctor repairs dependencies/application files in place
+  without replacing its locked launcher. Its child process verifies the repair.
+- [x] Normal menu choices are unchanged. Tag/remove dry runs still create no files.
+
+Verification on 2026-10-11:
+
+- **138 passed, 1 skipped** with `--basetemp .cache/pytest-installer-final`;
+  existing Windows symlink privilege skip, real junction check passed. Ruff lint,
+  formatting, and diff whitespace checks passed.
+- Actual isolated installs and repeat installs with app/tool/bin paths containing
+  spaces passed. The `.cmd` wrapper ran from outside the repository. Offline repair
+  from the retained package passed.
+- Official pinned uv bootstrap was downloaded, SHA256-verified, and executed.
+  A separate empty Python-management directory automatically received CPython
+  3.12.12, then supplied a successful full installation and native inference check.
+- A stale-lock source copy installed successfully while preserving its original
+  lock bytes. Evidence: `.cache/installer-smoke/13f2128011514c80af22e10f728a16d0/`
+  (`stale-install.verification.json`, adjacent transcripts, and application logs).
+- Deliberately removing NumPy from an isolated installed tool produced a readable
+  doctor failure; `doctor --fix --runtime-only --json` restored it and returned
+  `status=fixed`, with imports and native ONNX inference passing.
+- The supported installer installed 0.4.0 into the user's command environment;
+  `trainime doctor --json` passed runtime, storage, settings, command, model, and
+  score-cache checks. PATH repair prioritizes the selected command over older
+  user-PATH entries, preserves other entries, and checks command resolution again.
+- Installed 0.4.0, real SwinV2 CPU: tagging, repeat tagging, both dry runs,
+  removal with verified backups, cached retagging, and the four-choice menu passed.
+  Image hashes, unrelated text, and manual captions until explicit removal were
+  preserved. Evidence: `.cache/trainime-smoke/499497f2554e4395811f51c18ae7e708/verification.json`.
+  Only generated test images were used.
+- Initial failures are retained in that evidence directory: raw constraint paths
+  containing spaces, PowerShell 5.1 receipt replacement, inherited module lookup,
+  and attempting to replace a running Windows launcher. Regression checks and
+  corrected install/repair runs cover each fix.
+
+See [docs/INSTALLATION.md](docs/INSTALLATION.md) for the recovery contract.
+Windows x64 is qualified here; ARM64 native installation and other operating
+systems' installer flows are not. Anime accuracy and reviewed dataset acceptance
+remain separate, unfinished work.
+
 ## Trainime 0.3.0: implemented and installed
 
 - [x] Exact four-choice Home menu; path and `--dryrun` are the only action prompts.

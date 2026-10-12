@@ -26,7 +26,7 @@ class ScoreCache:
             raise ValueError("invalid source SHA256")
         return self.directory / digest[:2] / f"{digest}.npz"
 
-    def get(self, digest: str) -> np.ndarray | None:
+    def get(self, digest: str, *, repair: bool = False) -> np.ndarray | None:
         path = self.path(digest)
         if not path.exists():
             return None
@@ -40,6 +40,16 @@ class ScoreCache:
                     raise ValueError("score cache checksum/identity mismatch")
                 return scores
         except Exception as exc:
+            if repair:
+                from image_dataset_train.diagnostics import EventLog
+                from image_dataset_train.doctor import preserve
+
+                home = self.directory.parent.parent
+                saved = preserve(path, home, "scores")
+                EventLog(home).exception(
+                    exc, action="score_cache_repair", preserved=saved, source_sha256=digest
+                )
+                return None
             raise ValueError(
                 f"invalid score cache (preserved for inspection): {path}: {exc}"
             ) from exc

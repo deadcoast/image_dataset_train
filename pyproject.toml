@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "image-dataset-train"
-version = "0.3.0"
+version = "0.4.1"
 description = "Local, source-preserving image dataset preparation"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,8 +21,8 @@ tag-cpu = ["numpy>=2,<3", "onnxruntime>=1.20,<2", "huggingface-hub>=1,<2"]
 tag-gpu = ["numpy>=2,<3", "onnxruntime-gpu>=1.20,<2", "huggingface-hub>=1,<2"]
 
 [project.scripts]
-dataset = "image_dataset_train.cli:main"
-trainime = "image_dataset_train.trainime:main"
+dataset = "image_dataset_train.bootstrap:dataset_main"
+trainime = "image_dataset_train.bootstrap:main"
 
 [dependency-groups]
 dev = ["pytest>=8.3,<10", "ruff>=0.12,<1", "onnx>=1.18,<2"]

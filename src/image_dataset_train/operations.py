@@ -24,6 +24,7 @@ from uuid import uuid4
 from filelock import FileLock, Timeout
 
 from image_dataset_train.config import Config, ValidationConfig
+from image_dataset_train.diagnostics import EventLog, diagnose
 from image_dataset_train.inventory import (
     IMAGE_EXTENSIONS,
     Record,
@@ -60,6 +61,7 @@ class Result:
     report: Path | None = None
     backup: Path | None = None
     review: int = 0
+    log: Path | None = None
 
     @property
     def counts(self) -> Counter:
@@ -312,7 +314,9 @@ def _save_result(result: Result, status: str) -> None:
     )
 
 
-def _execute(config: Config, home: Path, action: str, dryrun: bool, progress: Progress) -> Result:
+def _execute(
+    config: Config, home: Path, action: str, dryrun: bool, progress: Progress, log: EventLog
+) -> Result:
     progress("Inspecting images…" if action == "tag" else "Checking captions…")
     records = (
         scan(
@@ -323,6 +327,16 @@ def _execute(config: Config, home: Path, action: str, dryrun: bool, progress: Pr
     )
     items = _plan(config.source, records, action, config.validation)
     result = Result(action, config.source, dryrun, items)
+    result.log = log.event("plan", action=action, source=config.source, counts=dict(result.counts))
+    for item in items:
+        if item.status in {"blocked", "rejected"}:
+            log.event(
+                "image_skipped",
+                level="error",
+                image=item.image,
+                reason=item.reason,
+                diagnosis=asdict(diagnose(item.reason)),
+            )
     ready = [item for item in items if item.status == "ready"]
     if dryrun or (not ready and not result.exit_code):
         return result
@@ -343,8 +357,8 @@ def _execute(config: Config, home: Path, action: str, dryrun: bool, progress: Pr
                 from image_dataset_train.tagging import tag_inventory
             except ImportError as exc:
                 raise RuntimeError(
-                    "Tagging runtime is missing. Install image-dataset-train[tag-cpu]; "
-                    "see README.md for the local uv install command."
+                    "Tagging runtime is missing. Run trainime doctor --fix, "
+                    "or run install.cmd again if Trainime cannot start."
                 ) from exc
             inventory, _ = publish_scan(config, records)
             model = bundle_path(config.models, config.tagging.model)
@@ -353,12 +367,16 @@ def _execute(config: Config, home: Path, action: str, dryrun: bool, progress: Pr
                 if not (model / "model.json").exists()
                 else "Checking tagger…"
             )
-            # A separate lock protects the shared model when tagging different directories.
-            with FileLock(str(home / "locks" / "model.lock"), timeout=0):
-                fetch_bundle(config.models, config.tagging.model)
+            from image_dataset_train.doctor import repair_model
+
+            repair_model(home, progress, fetch=fetch_bundle)
             progress("Tagging images…")
             tagged, _ = tag_inventory(
-                config, inventory, progress, only_sources={item.image for item in ready}
+                config,
+                inventory,
+                progress,
+                only_sources={item.image for item in ready},
+                repair_cache=True,
             )
             metadata = json.loads((tagged / "run.json").read_text(encoding="utf-8"))
             raw_manifest = (tagged / "manifest.jsonl").read_bytes()
@@ -380,6 +398,7 @@ def _execute(config: Config, home: Path, action: str, dryrun: bool, progress: Pr
                     result.review += bool(row.get("review_flags"))
                 except (OSError, ValueError) as exc:
                     result.errors.append(f"{item.image}: {exc}")
+                    log.exception(exc, action=action, image=item.image, operation=result.report)
                 progress(f"Writing captions: {number:,}/{len(ready):,}")
         else:
             for number, item in enumerate(ready, 1):
@@ -387,9 +406,11 @@ def _execute(config: Config, home: Path, action: str, dryrun: bool, progress: Pr
                     _remove_caption(config.source, item, result)
                 except (OSError, ValueError) as exc:
                     result.errors.append(f"{item.caption}: {exc}")
+                    log.exception(exc, action=action, caption=item.caption, operation=result.report)
                 progress(f"Removing captions: {number:,}/{len(ready):,}")
     except BaseException as exc:
         result.errors.append(f"{type(exc).__name__}: {exc}")
+        log.exception(exc, action=action, operation=result.report, completed=result.changed)
         _save_result(result, "cancelled" if isinstance(exc, KeyboardInterrupt) else "failed")
         if isinstance(exc, KeyboardInterrupt):
             progress(f"Cancelled; {result.changed:,} captions completed. Report: {result.report}")
@@ -397,6 +418,13 @@ def _execute(config: Config, home: Path, action: str, dryrun: bool, progress: Pr
             progress(f"Stopped; {result.changed:,} captions completed. Report: {result.report}")
         raise
     _save_result(result, "completed_with_issues" if result.exit_code else "completed")
+    log.event(
+        "completed",
+        action=action,
+        changed=result.changed,
+        issues=len(result.errors),
+        operation=result.report,
+    )
     return result
 
 
@@ -408,14 +436,16 @@ def run_directory(
     config = workflow_config(source, home)
     home = home.resolve()
     progress = progress or (lambda message: None)
+    log = EventLog(home, enabled=not dryrun)
     if dryrun:
-        return _execute(config, home, action, True, progress)
+        return _execute(config, home, action, True, progress, log)
     locks = home / "locks"
     locks.mkdir(parents=True, exist_ok=True)
     key = hashlib.sha256(os.path.normcase(str(config.source)).encode("utf-8")).hexdigest()
     try:
         with FileLock(str(locks / f"{key}.lock"), timeout=0):
-            return _execute(config, home, action, False, progress)
+            log.event("started", action=action, source=config.source)
+            return _execute(config, home, action, False, progress, log)
     except Timeout as exc:
         raise RuntimeError(
             "Another Trainime operation is using this directory or model. "

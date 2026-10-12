@@ -28,12 +28,29 @@ are no model, threshold, batching, or export menus in this workflow.
 - **Help:** `3` shows keys and commands. `q` exits; Ctrl+C cancels an action and
   returns Home. Tab completes paths; quoted Explorer paths work.
 
-To install the command from this checkout, using the existing `uv`:
+**Install:** double-click [install.cmd](install.cmd), or run:
 
 ```powershell
-uv tool install --python 3.12 --cache-dir .cache/uv '.[tag-cpu]'
-trainime
+.\install.cmd
 ```
+
+The installer handles Python, dependencies, the `trainime` command, and PATH. It
+checks imports and actual ONNX execution before completing installation. Open a
+new terminal and run `trainime`; the installer also prints a direct launch command
+for the current terminal. Running the installer again updates or repairs the app.
+
+**If something breaks:**
+
+```powershell
+trainime doctor --fix
+trainime logs
+```
+
+Doctor repairs missing dependencies, damaged application files, saved settings,
+and model/score caches. Damaged settings and cache files are preserved in recovery.
+If the command cannot start, run `install.cmd` again. Failed installs and operations
+print a specific recovery action and the log path. See
+[installation and recovery](docs/INSTALLATION.md).
 
 Direct commands use the same pipeline, with no prompts:
 
@@ -49,6 +66,19 @@ model download, inference, caption changes, or report/cache writes. It reports
 eligible files; it cannot predict the model's tags. To retag existing captions,
 use Remove Tags, then Tag Image Directory.
 
+A preview reports eligibility, not completed tagging:
+
+```text
+--dryrun found 166 images that can be serviced for tags.
+170 images scanned   ·   166 eligible   ·   4 already tagged (kept)
+No files changed. No tags generated.
+```
+
+`can` and eligible counts are green. Commands and navigation are cyan; skipped
+items are amber and failures red. The preview prints the exact command to apply
+the action. Narrow terminals use stacked counts; redirected output and `NO_COLOR`
+remain readable without color.
+
 Settings, models, score cache, reports, and removed captions live under
 `%LOCALAPPDATA%\trainime` on Windows. `TRAINIME_HOME` overrides that directory.
 The image directory must be separate from this application-data tree. The command
@@ -62,6 +92,7 @@ Reviewed training exports are pending.
 - [TODO.md](TODO.md): implementation status and next work.
 - [docs/TAGGING.md](docs/TAGGING.md): model research, tagging commands, and qualification limits.
 - [docs/TRAINIME.md](docs/TRAINIME.md): workflow design, preservation, recovery, and evidence.
+- [docs/INSTALLATION.md](docs/INSTALLATION.md): installer, error logs, doctor, and repair behavior.
 - [TAGGING-METHODS.md](TAGGING-METHODS.md): original notes and example snippets.
 
 ## Technical stage commands

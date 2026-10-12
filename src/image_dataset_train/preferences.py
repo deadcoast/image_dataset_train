@@ -7,18 +7,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from platformdirs import user_data_path
-
-from image_dataset_train.model_bundle import atomic_json
-
-
-def app_home() -> Path:
-    override = os.environ.get("TRAINIME_HOME")
-    return (
-        Path(override).expanduser().resolve()
-        if override
-        else user_data_path("trainime", appauthor=False).resolve()
-    )
+from image_dataset_train.diagnostics import app_home as app_home
+from image_dataset_train.diagnostics import atomic_json
 
 
 def image_directory(value: str) -> Path:
@@ -66,6 +56,13 @@ class Preferences:
 
     def save_default(self, path: Path | None) -> None:
         self.home.mkdir(parents=True, exist_ok=True)
+        if self.settings_file.exists():
+            try:
+                self.load(self.home)
+            except ValueError:
+                from image_dataset_train.doctor import preserve
+
+                preserve(self.settings_file, self.home, "settings")
         atomic_json(
             self.settings_file,
             {
