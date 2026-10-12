@@ -183,7 +183,9 @@ def _publish(
     atomic_json(pending / "summary.json", summary)
     atomic_json(pending / "run.json", metadata)
     final = root / run_id
-    pending.rename(final)
+    from image_dataset_train.diagnostics import publish_directory
+
+    publish_directory(pending, final)
     return final
 
 

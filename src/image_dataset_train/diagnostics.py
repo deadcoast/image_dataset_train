@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import tempfile
+import time
 import traceback
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -15,6 +16,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from image_dataset_train import __version__
+from image_dataset_train.terror import TERROR, TERROR_FIX
 
 
 def app_home() -> Path:
@@ -53,6 +55,28 @@ def atomic_json(path: Path, value: object) -> None:
         Path(temporary).unlink(missing_ok=True)
 
 
+def publish_directory(source: Path, target: Path) -> None:
+    """Publish a completed report, tolerating brief Windows file-sharing locks."""
+    for attempt in range(6):
+        if os.path.lexists(target):
+            raise FileExistsError(f"Report destination already exists: {target}")
+        try:
+            source.rename(target)
+            return
+        except PermissionError as exc:
+            if getattr(exc, "winerror", None) not in {5, 32, 33} or attempt == 5:
+                exc.add_note(f"Completed report retained at {source}. Retry the same command.")
+                raise
+            EventLog(app_home()).event(
+                "report_publish_retry",
+                source=source,
+                target=target,
+                attempt=attempt + 1,
+                error=str(exc),
+            )
+            time.sleep(0.05 * 2**attempt)
+
+
 def _redact_value(value: object) -> object:
     if isinstance(value, dict):
         sensitive = {
@@ -78,6 +102,7 @@ class Diagnosis:
     code: str
     problem: str
     fix: str
+    fix_code: str | None = None
 
 
 def diagnose(error: BaseException | str) -> Diagnosis:
@@ -111,12 +136,13 @@ def diagnose(error: BaseException | str) -> Diagnosis:
             "The saved settings cannot be read.",
             "Run: trainime doctor --fix. It preserves the broken settings before resetting them.",
         )
-    if any(s in lower for s in ("same-stem", "ambiguous", "collision")):
+    if any(s in lower for s in ("same-stem", "ambiguous", "collision", "[te001]", "[tf001]")):
         return Diagnosis(
-            "CAPTION_COLLISION",
-            "More than one file could use the same caption.",
-            "Give each image a unique filename stem (for example, art-jpg.jpg and "
-            "art-png.png), then retry. Existing captions are kept.",
+            "te001",
+            TERROR["te001"],
+            f"[tf001] {TERROR_FIX['tf001']} Apply: trainime tag <directory> --fix tf001. "
+            "Add --dryrun to preview renames and caption recovery without changes.",
+            "tf001",
         )
     if "caption" in lower and "not a regular file" in lower:
         return Diagnosis(

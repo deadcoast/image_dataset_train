@@ -1,8 +1,7 @@
 # Trainime
 
 Prepare local anime images for training: inventory, validation, deduplication,
-tagging, caption review, and reproducible image/sidecar exports. Image files stay
-untouched. Images are processed locally.
+tagging, caption review, and reproducible image/sidecar exports.
 
 **Run `trainime` to tag a directory or remove its captions.** The menu is:
 
@@ -65,6 +64,25 @@ Omit the path to use the saved default. `--dryrun` performs inspection only: no
 model download, inference, caption changes, or report/cache writes. It reports
 eligible files; it cannot predict the model's tags. To retag existing captions,
 use Remove Tags, then Tag Image Directory.
+
+**Same-stem collision `[te001]`: apply repair `[tf001]`.**
+
+```powershell
+trainime tag 'D:\images\anime' --fix tf001 --dryrun
+trainime tag 'D:\images\anime' --fix tf001
+```
+
+`--fix` alone selects `tf001` too. It gives colliding images unique stems, then
+continues tagging. For example, `art.jpg` and `art.png` become `art-jpg.jpg` and
+`art-png.png`; occupied stems get a numeric suffix. Ambiguous captions are copied
+and verified in recovery before leaving the image directory, then each renamed
+image receives its own generated caption. Unambiguous manual captions stay intact.
+The menu offers `Apply tf001? --fix [y/N]:` only when a collision occurs.
+
+For renaming without tagging: `trainime fix 'D:\images\anime'`, or
+`trainime doctor --path 'D:\images\anime' --fix tf001`. All accept `--dryrun`.
+Completed repairs do nothing on repeat runs; interrupted repairs resume from
+their saved plans. See [the repair contract](docs/TRAINIME.md#tagging-error-repairs).
 
 A preview reports eligibility, not completed tagging:
 

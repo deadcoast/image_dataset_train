@@ -284,13 +284,41 @@ def _cache_check(home: Path, fix: bool) -> Check:
     return Check("score_cache", "ok", f"Verified {checked} cached score vectors.")
 
 
-def _path_check(path: Path, home: Path, *, probe_write: bool = False) -> Check:
+def _path_check(
+    path: Path, home: Path, *, probe_write: bool = False, repair: bool = False, dryrun: bool = False
+) -> Check:
     from image_dataset_train.config import ValidationConfig
-    from image_dataset_train.operations import _plan, _removal_inventory, workflow_config
+    from image_dataset_train.operations import (
+        _plan,
+        _removal_inventory,
+        run_directory,
+        workflow_config,
+    )
     from image_dataset_train.preferences import image_directory
 
     source = image_directory(str(path))
     workflow_config(source, home)
+    repaired = None
+    if repair:
+        result = run_directory("fix", source, home, dryrun=dryrun)
+        repaired = result.repairs
+        if result.errors:
+            return Check(
+                "image_directory",
+                "error",
+                "; ".join(result.errors[:3]),
+                f'Retry: trainime fix "{source}"',
+            )
+        if dryrun and repaired and repaired.actions:
+            renames = [a for a in repaired.actions if a["kind"] == "image"]
+            preview = "; ".join(f"{a['source']} -> {a['target']}" for a in renames[:3])
+            return Check(
+                "image_directory",
+                "warning",
+                f"[te001] [tf001] Would rename {len(renames)} images; "
+                f"preserve ambiguous captions. {preview}",
+                f'Apply: trainime doctor --path "{source}" --fix tf001',
+            )
     if probe_write:
         with tempfile.TemporaryFile(dir=source):
             pass
@@ -302,8 +330,17 @@ def _path_check(path: Path, home: Path, *, probe_write: bool = False) -> Check:
         return Check(
             "image_directory",
             "error",
-            f"{len(problems)} association issues: {details}",
-            diagnose(problems[0].reason).fix,
+            f"[{diagnose(problems[0].reason).code}] {len(problems)} association issues: {details}",
+            f'[tf001] Apply: trainime doctor --path "{source}" --fix tf001'
+            if problems[0].error_code == "te001"
+            else diagnose(problems[0].reason).fix,
+        )
+    if repaired and repaired.actions:
+        return Check(
+            "image_directory",
+            "fixed",
+            f"[tf001] Renamed {repaired.renamed} images; preserved {repaired.archived} captions. "
+            f"Verified unique associations. Recovery: {', '.join(map(str, repaired.reports))}",
         )
     return Check(
         "image_directory", "ok", f"Readable: {source}; {len(items)} image associations checked."
@@ -439,7 +476,7 @@ def check_all(
         attempt("model", model)
         attempt("score_cache", lambda: _cache_check(home, fix))
         if path is not None:
-            attempt("image_directory", lambda: _path_check(path, home, probe_write=fix))
+            attempt("image_directory", lambda: _path_check(path, home, probe_write=fix, repair=fix))
     return checks
 
 
@@ -467,24 +504,37 @@ def main(argv: list[str]) -> int:
         return 0
     parser.add_argument(
         "--fix",
-        action="store_true",
-        help="repair owned settings/runtime/cache; keep recovery copies",
+        nargs="?",
+        const="all",
+        choices=["all", "tf001", "te001"],
+        help="repair runtime/settings/cache and --path collisions; tf001 selects stem repair only",
     )
     parser.add_argument(
         "--dryrun", "--dry-run", action="store_true", help="diagnose without writes or downloads"
     )
     parser.add_argument("--json", action="store_true", help="machine-readable findings")
     parser.add_argument(
-        "--path", type=Path, help="also inspect an image directory without modifying it"
+        "--path", type=Path, help="inspect a directory; --fix applies tf001 stem repair there"
     )
     parser.add_argument("--runtime-only", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv[1:])
     home = app_home()
     log = EventLog(home, enabled=not args.dryrun)
     try:
-        checks = check_all(
-            home, fix=args.fix and not args.dryrun, runtime_only=args.runtime_only, path=args.path
-        )
+        if args.fix in {"tf001", "te001"}:
+            from image_dataset_train.preferences import Preferences
+
+            selected = args.path or Preferences.load(home).default_path
+            if selected is None:
+                parser.error('Supply --path "D:\\images" for tf001, or save a default in Settings.')
+            checks = [_path_check(selected, home, repair=True, dryrun=args.dryrun)]
+        else:
+            checks = check_all(
+                home,
+                fix=bool(args.fix) and not args.dryrun,
+                runtime_only=args.runtime_only,
+                path=args.path,
+            )
         result = [asdict(check) for check in checks]
         report = log.event("doctor", fix=args.fix and not args.dryrun, checks=result)
         if args.json:

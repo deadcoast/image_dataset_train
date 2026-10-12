@@ -16,6 +16,7 @@ from PIL import __version__ as pillow_version
 
 from image_dataset_train import __version__
 from image_dataset_train.config import Config
+from image_dataset_train.diagnostics import publish_directory
 from image_dataset_train.inventory import Record, scan, summarize
 
 
@@ -64,5 +65,5 @@ def publish_scan(config: Config, records: list[Record]) -> tuple[Path, dict]:
     (staging / "summary.json").write_text(_json(summary), encoding="utf-8", newline="\n")
     (staging / "run.json").write_text(_json(metadata), encoding="utf-8", newline="\n")
     final = runs / run_id
-    staging.rename(final)
+    publish_directory(staging, final)
     return final, summary

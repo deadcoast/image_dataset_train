@@ -39,11 +39,15 @@ trainime doctor
 trainime doctor --fix
 trainime doctor --path 'D:\images\anime'
 trainime doctor --fix --dryrun
+trainime doctor --path 'D:\images\anime' --fix tf001 --dryrun
+trainime doctor --path 'D:\images\anime' --fix tf001
 ```
 
 Doctor checks dependencies, native CPU inference, saved settings, storage, command
 registration, model integrity, and cached score integrity. `--path` additionally
-checks image/caption associations. `--fix` performs supported repairs;
+checks image/caption associations. `--fix` performs supported repairs, including
+`tf001` when `--path` is supplied; `--fix tf001` selects only the stem repair and
+does not prepare a model or repair dependencies. A saved default can supply its path.
 `--dryrun` prevents writes and downloads, even with `--fix`. `--json` returns
 structured findings for scripts. Diagnosis remains accessible when the UI or native
 tagging libraries are broken because the startup and doctor code use the standard
@@ -60,7 +64,7 @@ library and probe the runtime in a separate process.
 | Download failure | Reconnect/check proxy and system clock, then repeat the action or run doctor. Partial download caches remain available. TLS verification stays enabled. |
 | Full disk | Free space on the reported drive or choose another writable `TRAINIME_HOME`, then repeat the action. Completed captions and backups are kept. |
 | Locked/read-only files | Close the writer or use a writable folder, then repeat the action. Errors name the file and retain a traceback. |
-| Two images share a caption stem | Give the images distinct stems, such as `art-jpg.jpg` and `art-png.png`. Doctor reports collisions; it does not guess which caption belongs to which image. |
+| `[te001]` Same-stem image or caption collision | Apply `[tf001]`: `trainime tag <directory> --fix tf001` renames colliding images, preserves ambiguous captions in verified recovery copies, and tags the renamed images. `trainime doctor --path <directory> --fix tf001` applies the repair without tagging. Add `--dryrun` to preview. |
 | Broken/animated/excessively large image | Re-export a single-frame PNG/JPEG with reasonable dimensions and retry that file. The original is retained. |
 | App data overlaps the image folder | Select the image subfolder or set `TRAINIME_HOME` to a separate writable directory. |
 
@@ -70,9 +74,11 @@ without replacing that launcher; verification runs in a new process. A broken
 launcher is repaired by `install.cmd`, outside the affected process. Original
 damaged application files are retained under `recovery/application`.
 
-Doctor never renames source images, invents a caption association, weakens file
-integrity checks, changes system security policy, or deletes dataset files to make
-a check pass. Findings that require a data decision include a concrete manual fix.
+`tf001` explicitly permits image renaming within the chosen directory. Image bytes
+remain unchanged, and existing ambiguous captions are preserved in recovery instead
+of being assigned to an arbitrary image. Doctor retains integrity checks and system
+security policy. The repair plan and journal record original paths, new paths,
+SHA256 hashes, caption recovery, and completion state. Retrying resumes pending work.
 
 ## Logs
 

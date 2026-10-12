@@ -3,6 +3,7 @@
 Designed and implemented 2026-10-11. The initial workflow is version 0.3.0;
 version 0.4.0 adds the [installer, diagnostics, and repair system](INSTALLATION.md).
 Version 0.4.1 refines the terminal presentation and makes dry-run eligibility explicit.
+Version 0.5.0 adds executable `te001` / `tf001` collision repair.
 
 ## Interaction
 
@@ -13,6 +14,10 @@ session. Both actions print the equivalent direct command. Blank answers to the
 preview question apply the operation; `y` or `--dryrun` previews. Ctrl+C cancels
 back to Home, including from Settings. Ctrl+D exits at a prompt. Nothing asks
 whether to continue to another stage.
+When `te001` occurs, the menu offers one conditional `Apply tf001? --fix [y/N]:`
+question. Accepting applies the repair and continues the selected action. There
+are no additional normal-path menus. Starting with `trainime --fix` opts into the
+repair for menu actions; direct commands accept `--fix` or `--fix tf001`.
 
 Settings exposes two paths and Back. It stores only the default path. Session
 state and input history stay in memory. Paths accept quotes, spaces, Unicode,
@@ -68,7 +73,8 @@ the CPU installation works without CUDA. Model research and limitations are in
    corrupted, animated, excessive-pixel, or excessive-byte inputs are skipped.
 2. Preserve existing captions, including empty/manual captions. Same-stem images,
    case-folded collisions, linked captions, and directory-shaped caption paths are
-   blocked. Report them; do not guess their association.
+   blocked. Same-stem collisions report `[te001]` and an executable `[tf001]`
+   command. Explicit `--fix tf001` repairs them before this tagging pass.
 3. If no captions are missing, finish without model setup. Otherwise, obtain the
    pinned model automatically, validate its artifact hashes, and publish an inventory.
 4. Infer only eligible images missing captions. Apply the existing reference
@@ -84,13 +90,61 @@ Raw scores, full manifests, runtime identity, and review flags remain under the
 application directory. A caption is an automatic model prediction; writing it does
 not establish training acceptance or anime tagging accuracy.
 
+## Tagging error repairs
+
+The definitions live in `src/image_dataset_train/terror.py`:
+
+```json
+{
+  "TERROR": {"te001": "Same-stem image or caption collision."},
+  "TERROR_FIX": {"tf001": "Give each image a unique filename stem."},
+  "FIX_FOR_ERROR": {"te001": "tf001"}
+}
+```
+
+The same repair engine serves `trainime tag <path> --fix tf001`,
+`trainime remove <path> --fix tf001`, `trainime fix <path>`, the menu's conditional
+fix option, and `trainime doctor --path <path> --fix tf001`. `te001` is also accepted
+as the selector. Unknown codes are rejected rather than silently running another fix.
+All these commands accept `--dryrun`, which previews without writes or downloads.
+
+The rule applies recursively to every same-stem group, with case-folded comparison
+inside each directory. Each regular image gets `<stem>-<extension>` with a numeric
+suffix if occupied; reservations include existing files, folders, captions, and
+other planned destinations. Long stems are shortened with a hash suffix to leave
+room. Images keep their directory, extension, and bytes. Unique image/caption pairs
+are left alone; directories and links are never moved as files.
+
+Existing captions in a collision have no reliable owner. Before any image in that
+group moves, preserve every regular ambiguous caption under
+`operations/<time>-tf001-<id>/captions/<original-relative-path>`, flush and verify its
+SHA256, then remove the original ambiguous sidecar. Tagging generates independent
+captions for the renamed images. Fix-only/doctor commands stop after repair.
+
+Before mutation, `fix.json` records `error_code`, `fix_code`, source root, original
+and destination paths, SHA256 hashes, and per-action completion. The append-only
+`journal.jsonl` records intent and completion. Exclusive publication avoids
+overwriting a raced destination. An interrupted repair resumes from its saved plan;
+a publication completed before journaling is recognized by its hash. Retrying
+refreshes remaining file snapshots and retains changed snapshots/partial backups.
+Tag/remove without `--fix` will not proceed through an unfinished repair. Completed
+groups are not renamed again. Repair and tagging share the source-directory lock.
+
+Output and structured error events carry `[te001]` and `[tf001]`; tag-operation
+receipts link their repair reports. Repair results show counts and recovery paths.
+These journals provide process-interruption recovery, not filesystem-wide atomicity
+or a guarantee against hardware failure or hostile external file changes.
+Completed inventory/tag reports retry brief Windows sharing locks with bounded
+backoff before reporting failure; a persistent lock leaves staged reports intact.
+
 ## Removal, recovery, and interruptions
 
 Remove Tags means removal of paired text caption files, including manual captions.
 It does not mean changing image metadata. Removal inspects file associations and
 caption hashes without decoding images or loading a model. A caption beside a
 corrupt image with a supported extension can still be removed. Orphan `.txt`
-files and ambiguous image/caption stems remain untouched.
+files and ambiguous image/caption stems remain untouched unless `--fix tf001`
+explicitly requests the repair described above.
 
 For each matched caption, copy its bytes under
 `operations/<run>/captions/<original-relative-path>`, flush the backup, verify its

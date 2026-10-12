@@ -1,5 +1,42 @@
 # Implementation status
 
+## Trainime 0.5.0: executable te001 / tf001 repair
+
+- [x] Stable TERROR/TERROR_FIX definitions, structured error/fix codes, and a
+  runnable command in collision output.
+- [x] One general recursive repair: deterministic unique stems, case-folded
+  reservations, occupied-name counters, long-name handling, unchanged image bytes,
+  verified recovery for ambiguous captions, and preservation of unrelated pairs.
+- [x] `tag/remove --fix [tf001]`, fix-only command, targeted doctor repair, and
+  one conditional menu question when te001 occurs. No normal-path menu changes.
+- [x] Read-only dry-run plans and apply commands that retain the fix flag.
+- [x] Shared operation lock, saved intent, exclusive renames, partial-backup
+  retention, cancellation/restart recovery, and repeat-run idempotence.
+
+Verification: **167 passed, 2 skipped**, `.cache/pytest-tf001-qualified`; Ruff lint
+and formatting pass. The skips are the existing Windows symlink privilege check
+and case-only caption duplicates, which standard Windows directories cannot hold.
+Real junction escape checks pass. Tests use arbitrary stems, Unicode, nested groups,
+existing destinations, actual native ONNX test inference, incomplete backups,
+interrupted rename/journal publication, concurrent destination creation, retries,
+and menu/CLI/doctor paths. No personal image directory or personal error log was
+examined to develop this rule.
+
+Final verification exposed transient Windows access-denied errors while publishing
+tag reports (retained in `.cache/tf001-final-recheck.xml`). Report publication now
+retries Windows sharing/access locks at most five times with bounded backoff and
+logs each retry; persistent failures retain the completed staging directory.
+Transient and persistent failure tests pass. Final suite receipt:
+`.cache/tf001-qualified.xml`.
+
+Installed 0.5.0 through `install.cmd`. The installed wheel matches all source
+modules. Its real SwinV2 CPU run repaired two colliding generated images, retained
+their exact bytes, preserved the ambiguous caption, and generated independent
+captions. Repeat repair changed no names or captions. Installed dry runs wrote
+nothing, and targeted doctor/fix-only commands passed on another arbitrary stem.
+Final installed evidence: `.cache/tf001-installed/f67e1b0947d64f18b6579a5f4bc92809/verification.json`
+and adjacent command transcripts, with isolated application data and repair journals.
+
 ## Trainime 0.4.1: terminal output polish
 
 - [x] Dry runs explicitly report images that **can** be serviced for tags (or

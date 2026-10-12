@@ -30,7 +30,7 @@ from image_dataset_train.trainime import Terminal, main
         (FileNotFoundError("gone"), "PATH_MISSING"),
         (ImportError("missing"), "RUNTIME_BROKEN"),
         ("Cannot read settings: invalid JSON", "SETTINGS_INVALID"),
-        ("Same-stem image collision", "CAPTION_COLLISION"),
+        ("Same-stem image collision", "te001"),
         ("model bundle hash mismatch", "ARTIFACT_DAMAGED"),
         ("model download failed", "NETWORK_UNAVAILABLE"),
         ("Another Trainime operation is using this directory", "JOB_BUSY"),
@@ -137,6 +137,41 @@ def test_runtime_probe_executes_native_onnx():
     healthy, detail = doctor.runtime_probe()
     assert healthy, detail
     assert json.loads(detail)["inference"] == "passed"
+
+
+@pytest.mark.parametrize("permanent", [False, True])
+def test_report_publication_recovers_brief_windows_locks_and_retains_on_failure(
+    tmp_path, monkeypatch, permanent
+):
+    from pathlib import Path
+
+    stage, target = tmp_path / ".pending-report", tmp_path / "published"
+    stage.mkdir()
+    (stage / "manifest.json").write_bytes(b"verified report")
+    original = Path.rename
+    attempts = []
+    pauses = []
+
+    def locked(path, destination):
+        attempts.append(1)
+        if permanent or len(attempts) <= 2:
+            error = PermissionError("fixture Windows sharing lock")
+            error.winerror = 5
+            raise error
+        return original(path, destination)
+
+    monkeypatch.setattr(Path, "rename", locked)
+    monkeypatch.setattr(diagnostics.time, "sleep", pauses.append)
+    if permanent:
+        with pytest.raises(PermissionError):
+            diagnostics.publish_directory(stage, target)
+        assert len(attempts) == 6 and not target.exists()
+        assert (stage / "manifest.json").read_bytes() == b"verified report"
+    else:
+        diagnostics.publish_directory(stage, target)
+        assert len(attempts) == 3 and pauses == [0.05, 0.1]
+        assert (target / "manifest.json").read_bytes() == b"verified report"
+        assert not stage.exists()
 
 
 def test_broken_settings_do_not_lock_out_interactive_menu(tmp_path, monkeypatch, capsys):

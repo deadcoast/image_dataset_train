@@ -42,13 +42,19 @@ To retag: Remove Tags, then Tag Image Directory.
 
 trainime doctor --fix   Diagnose and repair installation, settings, and caches.
 trainime logs          Show log locations and the latest error details.
+trainime tag "D:\\images" --fix tf001   Repair te001 collisions, then tag.
+Add --dryrun to preview. Ambiguous captions are preserved in recovery.
 """
 
 
-def command_text(action: str, source: Path, dryrun: bool) -> str:
+def command_text(action: str, source: Path, dryrun: bool, fix: str | bool = False) -> str:
     text = str(source)
     quoted = "'" + text.replace("'", "''") + "'" if os.name == "nt" else shlex.quote(text)
-    return f"trainime {action} {quoted}" + (" --dryrun" if dryrun else "")
+    return (
+        f"trainime {action} {quoted}"
+        + (" --fix tf001" if fix else "")
+        + (" --dryrun" if dryrun else "")
+    )
 
 
 class Terminal:
@@ -156,19 +162,27 @@ class Terminal:
             enable_history_search=False,
         )
 
-    def work(self, action: str, source: Path, home: Path, dryrun: bool) -> Result:
+    def work(
+        self, action: str, source: Path, home: Path, dryrun: bool, fix: str | bool = False
+    ) -> Result:
         self.home, self.dryrun = home, dryrun
         self.heading(
             ("Dry run" if dryrun else "Run")
             + " · "
-            + ("Tag images" if action == "tag" else "Remove captions")
+            + {"tag": "Tag images", "remove": "Remove captions", "fix": "Fix te001"}[action]
         )
-        self.say(command_text(action, source, dryrun), style="dim", literal=True)
+        self.say(command_text(action, source, dryrun, fix), style="dim", literal=True)
         self.say(
             "Checking eligibility only; no tags generated or files changed."
             if dryrun
             else "Including subfolders · "
-            + ("existing captions are kept" if action == "tag" else "captions are backed up first"),
+            + (
+                "tf001 renames collisions and preserves ambiguous captions in recovery"
+                if fix or action == "fix"
+                else "existing captions are kept"
+                if action == "tag"
+                else "captions are backed up first"
+            ),
             style="dim",
         )
         self.say()
@@ -207,9 +221,39 @@ class Terminal:
                     self.say(message, style="dim")
                     last, last_phase = now, phase
 
-            return run_directory(action, source, home, dryrun=dryrun, progress=progress)
+            return run_directory(action, source, home, dryrun=dryrun, progress=progress, fix=fix)
 
     def result(self, result: Result) -> None:
+        if result.repairs is not None:
+            repairs = result.repairs
+            renames = [a for a in repairs.actions if a["kind"] == "image"]
+            captions = [a for a in repairs.actions if a["kind"] == "caption"]
+            self.heading("[tf001] " + ("Repair preview" if result.dryrun else "Repair results"))
+            if result.dryrun:
+                self.say(
+                    f"Would rename {len(renames):,} images and preserve "
+                    f"{len(captions):,} ambiguous captions in recovery."
+                )
+                for action in renames[:3]:
+                    self.say(f"  {action['source']} → {action['target']}")
+                if len(renames) > 3:
+                    self.say(f"  …and {len(renames) - 3:,} more renames.")
+                self.say("No files changed.", style="dim")
+            else:
+                self.say(
+                    f"Renamed {repairs.renamed:,} images; preserved "
+                    f"{repairs.archived:,} ambiguous captions in recovery."
+                )
+            for report in repairs.reports:
+                self.path("tf001 journal / caption recovery", report)
+        if result.action == "fix":
+            for error in result.errors[:3]:
+                self.say(error, style="red")
+            if result.errors and result.log:
+                self.path("Error log", result.log)
+            if result.dryrun and result.repairs and result.repairs.actions:
+                self.say(command_text("fix", result.source, False), style="cyan", literal=True)
+            return
         counts = result.counts
         skipped = counts["blocked"] + counts["rejected"]
         if result.dryrun:
@@ -291,11 +335,21 @@ class Terminal:
             for filename, reason in issues[:3]:
                 diagnosis = diagnose(reason)
                 detail = diagnosis.problem if diagnosis.code == "IMAGE_UNREADABLE" else reason
-                self.say(Text.assemble("  ", (f"{filename}: " if filename else "", "bold"), detail))
+                self.say(
+                    Text.assemble(
+                        f"  [{diagnosis.code}] ",
+                        (f"{filename}: " if filename else "", "bold"),
+                        detail,
+                    )
+                )
             fixes = []
             for _, reason in issues[:3]:
                 diagnosis = diagnose(reason)
                 fix = diagnosis.fix.removeprefix("Run: ")
+                if diagnosis.code == "te001":
+                    fix = "[tf001] Apply: " + command_text(
+                        result.action, result.source, False, True
+                    )
                 if diagnosis.code == "UNEXPECTED_ERROR" and not result.log:
                     fix = "Retry the action. If it still fails, run trainime doctor."
                 fixes.append(fix)
@@ -304,7 +358,8 @@ class Terminal:
             if len(issues) > 3:
                 self.say(f"  …and {len(issues) - 3:,} more.")
         if not result.items:
-            self.say("No supported images found in this directory.")
+            if not result.errors:
+                self.say("No supported images found in this directory.")
         elif counts["existing"] == len(result.items):
             self.say("All images already have captions.")
         if result.review:
@@ -323,7 +378,11 @@ class Terminal:
         if result.dryrun and counts["ready"]:
             self.say()
             self.say("Run to apply", style="bold")
-            self.say(command_text(result.action, result.source, False), style="cyan", literal=True)
+            self.say(
+                command_text(result.action, result.source, False, result.repairs is not None),
+                style="cyan",
+                literal=True,
+            )
         self.say()
 
 
@@ -335,11 +394,13 @@ class App:
         worker: Callable[..., Result] | None = None,
         *,
         dryrun: bool = False,
+        fix: str | bool = False,
     ) -> None:
         self.preferences = preferences
         self.terminal = terminal
         self.worker = worker or terminal.work
         self.dryrun = dryrun
+        self.fix = fix
         self.terminal.home = preferences.home
         self.terminal.dryrun = dryrun
 
@@ -383,8 +444,32 @@ class App:
             return
         if action == "remove":
             self.terminal.say("Remove matching .txt captions; save a backup first.")
-        result = self.worker(action, source, self.preferences.home, self._preview())
+        dryrun = self._preview()
+        options = {"fix": self.fix} if self.fix else {}
+        result = self.worker(action, source, self.preferences.home, dryrun, **options)
         self.terminal.result(result)
+        if (
+            not dryrun
+            and not self.fix
+            and (
+                any(i.error_code == "te001" for i in result.items)
+                or any(diagnose(error).code == "te001" for error in result.errors)
+            )
+        ):
+            self.terminal.say(
+                "[tf001] Rename colliding images; preserve ambiguous captions in recovery."
+            )
+            while True:
+                answer = self.terminal.ask("Apply tf001? --fix [y/N]: ").strip().lower()
+                if answer in {"", "n", "no", "q"}:
+                    break
+                if answer in {"y", "yes", "--fix", "--fix tf001", "tf001"}:
+                    repaired = self.worker(
+                        action, source, self.preferences.home, False, fix="tf001"
+                    )
+                    self.terminal.result(repaired)
+                    break
+                self.terminal.say("Enter y to apply --fix tf001, or Enter to keep files unchanged.")
 
     def settings(self) -> None:
         while True:
@@ -468,6 +553,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"trainime {__version__}")
     parser.add_argument(
+        "--fix",
+        nargs="?",
+        const="tf001",
+        choices=["tf001", "te001"],
+        help="apply tf001 collision repair during menu actions",
+    )
+    parser.add_argument(
         "--dryrun",
         "--dry-run",
         action="store_true",
@@ -477,9 +569,18 @@ def _parser() -> argparse.ArgumentParser:
     for name, help_text in (
         ("tag", "write missing image captions"),
         ("remove", "back up and remove matching image captions"),
+        ("fix", "apply tf001 collision repair without tagging"),
     ):
         command = sub.add_parser(name, help=help_text, description=help_text.capitalize() + ".")
         command.add_argument("path", nargs="?", help="image directory; defaults to saved path")
+        command.add_argument(
+            "--fix",
+            nargs="?",
+            const="tf001",
+            choices=["tf001", "te001"],
+            dest="action_fix",
+            help="repair te001 with tf001 before this action",
+        )
         command.add_argument(
             "--dryrun",
             "--dry-run",
@@ -514,7 +615,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             preferences = Preferences(app_home())
             terminal.say("Continuing without a saved default. The original settings are kept.")
         if args.action is None:
-            return App(preferences, terminal, dryrun=args.dryrun).run()
+            return App(preferences, terminal, dryrun=args.dryrun, fix=args.fix).run()
         source = image_directory(args.path) if args.path else preferences.default_path
         if source is None:
             terminal.say(
@@ -524,7 +625,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return 2
         result = terminal.work(
-            args.action, source, preferences.home, args.dryrun or args.action_dryrun
+            args.action,
+            source,
+            preferences.home,
+            args.dryrun or args.action_dryrun,
+            fix=args.fix or args.action_fix,
         )
         terminal.result(result)
         return result.exit_code

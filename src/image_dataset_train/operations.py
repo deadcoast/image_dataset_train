@@ -1,6 +1,7 @@
 """Opinionated workflows behind Trainime's two directory actions.
 
-Images are read-only. Caption creation never replaces an existing path. Removal
+Images are read-only unless tf001 is explicitly requested to rename collisions.
+Caption creation never replaces an existing path. Removal
 copies and verifies captions in a separate recovery directory before unlinking.
 """
 
@@ -23,6 +24,7 @@ from uuid import uuid4
 
 from filelock import FileLock, Timeout
 
+from image_dataset_train.collision_fix import FixResult, pending_repairs, repair_collisions
 from image_dataset_train.config import Config, ValidationConfig
 from image_dataset_train.diagnostics import EventLog, diagnose
 from image_dataset_train.inventory import (
@@ -36,6 +38,7 @@ from image_dataset_train.inventory import (
 from image_dataset_train.model_bundle import atomic_json, bundle_path, fetch_bundle
 from image_dataset_train.preferences import image_directory
 from image_dataset_train.runs import publish_scan
+from image_dataset_train.terror import FIX_FOR_ERROR, TERROR, fix_code
 
 Progress = Callable[[str], None]
 
@@ -48,6 +51,8 @@ class Item:
     reason: str = ""
     image_sha256: str | None = None
     caption_sha256: str | None = None
+    error_code: str | None = None
+    fix_code: str | None = None
 
 
 @dataclass
@@ -62,6 +67,7 @@ class Result:
     backup: Path | None = None
     review: int = 0
     log: Path | None = None
+    repairs: FixResult | None = None
 
     @property
     def counts(self) -> Counter:
@@ -161,7 +167,9 @@ def _plan(source: Path, records: list[Record], action: str, limits: ValidationCo
                 directories[image.parent] = groups
             images, captions = directories[image.parent].get(image.stem.casefold(), ([], []))
             if len(images) != 1 or len(captions) > 1:
-                raise ValueError("Same-stem image or caption collision.")
+                item.error_code = "te001"
+                item.fix_code = FIX_FOR_ERROR[item.error_code]
+                raise ValueError(TERROR[item.error_code])
             if captions:
                 caption = captions[0]
                 item.caption = caption.relative_to(source).as_posix()
@@ -309,13 +317,28 @@ def _save_result(result: Result, status: str) -> None:
             "errors": result.errors,
             "review": result.review,
             "backup": str(result.backup) if result.backup else None,
+            "repairs": {
+                "error_code": "te001",
+                "fix_code": "tf001",
+                "renamed": result.repairs.renamed,
+                "archived": result.repairs.archived,
+                "reports": [str(p) for p in result.repairs.reports],
+            }
+            if result.repairs
+            else None,
             "updated_at": datetime.now(UTC).isoformat(),
         },
     )
 
 
 def _execute(
-    config: Config, home: Path, action: str, dryrun: bool, progress: Progress, log: EventLog
+    config: Config,
+    home: Path,
+    action: str,
+    dryrun: bool,
+    progress: Progress,
+    log: EventLog,
+    repairs: FixResult | None = None,
 ) -> Result:
     progress("Inspecting images…" if action == "tag" else "Checking captions…")
     records = (
@@ -326,7 +349,27 @@ def _execute(
         else (_removal_inventory(config.source, progress))
     )
     items = _plan(config.source, records, action, config.validation)
-    result = Result(action, config.source, dryrun, items)
+    if dryrun and repairs:
+        renamed = {a["source"]: a["target"] for a in repairs.actions if a["kind"] == "image"}
+        by_name = {row.source_path: row for row in records}
+        for item in items:
+            if item.error_code != "te001" or item.image not in renamed:
+                continue
+            row = by_name[item.image]
+            if row.decision in {"error", "rejected"}:
+                item.status, item.reason = "rejected", row.error or ", ".join(row.reasons)
+            elif (
+                action == "tag"
+                and max(row.stored_width or 0, row.stored_height or 0) ** 2
+                > config.validation.max_decode_pixels
+            ):
+                item.status, item.reason = "rejected", "Square preprocessing exceeds pixel limit."
+            else:
+                item.status = "ready" if action == "tag" else "missing"
+                item.reason = "tf001 planned"
+                item.caption = Path(renamed[item.image]).with_suffix(".txt").as_posix()
+            item.error_code = item.fix_code = None
+    result = Result(action, config.source, dryrun, items, repairs=repairs)
     result.log = log.event("plan", action=action, source=config.source, counts=dict(result.counts))
     for item in items:
         if item.status in {"blocked", "rejected"}:
@@ -335,6 +378,8 @@ def _execute(
                 level="error",
                 image=item.image,
                 reason=item.reason,
+                error_code=item.error_code,
+                fix_code=item.fix_code,
                 diagnosis=asdict(diagnose(item.reason)),
             )
     ready = [item for item in items if item.status == "ready"]
@@ -429,23 +474,66 @@ def _execute(
 
 
 def run_directory(
-    action: str, source: Path, home: Path, *, dryrun: bool = False, progress: Progress | None = None
+    action: str,
+    source: Path,
+    home: Path,
+    *,
+    dryrun: bool = False,
+    progress: Progress | None = None,
+    fix: str | bool = False,
 ) -> Result:
-    if action not in {"tag", "remove"}:
+    if action not in {"tag", "remove", "fix"}:
         raise ValueError("Unknown directory action.")
+    selected_fix = fix_code(fix or action == "fix")
     config = workflow_config(source, home)
     home = home.resolve()
     progress = progress or (lambda message: None)
     log = EventLog(home, enabled=not dryrun)
+
+    def perform() -> Result:
+        repairs = None
+        if selected_fix:
+            progress("[tf001] Checking same-stem collisions…")
+            repairs = repair_collisions(config.source, home, dryrun=dryrun, progress=progress)
+        elif pending_repairs(config.source, home):
+            error = "[te001] An interrupted tf001 repair needs to finish. Rerun with --fix tf001."
+            report = log.event(
+                "fix_pending",
+                level="error",
+                error_code="te001",
+                fix_code="tf001",
+                source=config.source,
+                message=error,
+            )
+            return Result(
+                action,
+                config.source,
+                dryrun,
+                [],
+                errors=[error],
+                log=report,
+            )
+        if action == "fix" or repairs and repairs.errors:
+            return Result(
+                action,
+                config.source,
+                dryrun,
+                [],
+                errors=repairs.errors if repairs else [],
+                repairs=repairs,
+                log=repairs.log if repairs else None,
+            )
+        return _execute(config, home, action, dryrun, progress, log, repairs=repairs)
+
     if dryrun:
-        return _execute(config, home, action, True, progress, log)
+        return perform()
     locks = home / "locks"
     locks.mkdir(parents=True, exist_ok=True)
     key = hashlib.sha256(os.path.normcase(str(config.source)).encode("utf-8")).hexdigest()
     try:
         with FileLock(str(locks / f"{key}.lock"), timeout=0):
             log.event("started", action=action, source=config.source)
-            return _execute(config, home, action, False, progress, log)
+            return perform()
     except Timeout as exc:
         raise RuntimeError(
             "Another Trainime operation is using this directory or model. "
