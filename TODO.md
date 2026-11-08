@@ -1,5 +1,24 @@
 # Implementation status
 
+## Current status — 2026-11-07
+
+- The installed `trainime` directory workflow and technical `dataset` pipeline are
+  separate: the former may write/remove source captions; the latter writes
+  inventory, score, and draft artifacts under configured run paths.
+- M1 inventory, WD tagging execution, and Trainime recovery workflows are
+  implemented. Historical package and installed-command evidence is recorded in
+  the milestone sections below; it was not rerun for this status update.
+- M2 has an initial read-only pHash proposal command. It publishes a hashed list
+  of image fingerprints and unreviewed candidate pairs. Automated regression
+  coverage and collection-specific threshold qualification remain outstanding.
+- Durable review decisions, related-image groups, group-aware splits, reviewed
+  exports, and pinned trainer import are not implemented. No user collection has
+  been scanned or accepted as training-ready.
+
+The next steps are similarity-stage coverage and pilot calibration, durable review
+records, then group-aware split/export and a pinned trainer import check. Model
+accuracy, physical CUDA, scale, and human acceptance stay separately qualified.
+
 ## Trainime 0.5.1: numeric repair registry and dispatch
 
 - [x] Replace the 0.5.0 single-fix CLI/doctor branches with registered numeric
@@ -225,11 +244,11 @@ anime tagging accuracy, large-collection performance, or training readiness.
 
 ## Next implementation
 
-1. Tagging quality: compare model profiles and tune thresholds on a reviewed anime pilot.
-2. M2: pHash pair proposals and reviewable related-image groups; no automatic moves.
-3. M4: durable per-image review overrides; initial deterministic caption rules already work.
-4. M5: group-aware splitting, verified image/caption exports, Kohya adapter.
-5. M6: pilot qualification, then full collection run and QA.
+1. Add and qualify tests for the read-only M2 pHash proposal stage on generated positive and negative pairs.
+2. Review representative anime pairs and calibrate proposal thresholds; record false-match and missed-match behavior.
+3. Add durable related-image groups and per-image review decisions without automatic source moves.
+4. Add group-aware deterministic splits, verified immutable image/caption exports, and a Kohya adapter.
+5. Verify export with a pinned trainer import, then qualify pilot and full-collection QA.
 
 ## Pending evidence
 

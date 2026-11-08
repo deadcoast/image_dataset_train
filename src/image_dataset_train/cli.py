@@ -27,6 +27,18 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument(
         "--runs", type=Path, help="report root override, relative to the current directory"
     )
+    similarity = commands.add_parser(
+        "similarity", help="propose perceptually similar image pairs for review; never changes sources"
+    )
+    similarity.add_argument("--inventory", type=Path, required=True)
+    similarity.add_argument("--config", type=Path, default=Path("config.toml"))
+    similarity.add_argument(
+        "--max-distance",
+        type=int,
+        choices=range(65),
+        default=8,
+        help="maximum 64-bit pHash Hamming distance for a review proposal (default: 8)",
+    )
     from image_dataset_train.model_bundle import MODELS
 
     fetch = commands.add_parser("fetch-model", help="download a pinned WD model and its labels")
@@ -106,6 +118,23 @@ def main(argv: list[str] | None = None) -> int:
                 "Review and training export remain pending."
             )
             return 1 if summary["decisions"].get("error") else 0
+
+        if args.command == "similarity":
+            from image_dataset_train.similarity import propose_similar
+
+            directory, summary = propose_similar(
+                config,
+                args.inventory,
+                max_distance=args.max_distance,
+                progress=lambda message: print(message, file=sys.stderr, flush=True),
+            )
+            print(f"Similarity review proposals: {directory}")
+            print(
+                f"Images hashed: {summary['images_hashed']}/{summary['images_considered']}; "
+                f"pairs to review: {summary['pairs_proposed']}; errors: {summary['errors']}"
+            )
+            print("No source files changed. Proposals are not duplicate decisions.")
+            return 1 if summary["errors"] else 0
 
         def progress(count: int) -> None:
             if count % 100 == 0:

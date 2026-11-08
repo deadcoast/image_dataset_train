@@ -1,4 +1,4 @@
-"""Small, strict configuration for the implemented intake stage."""
+"""Small, strict configuration for implemented dataset CLI stages."""
 
 from __future__ import annotations
 

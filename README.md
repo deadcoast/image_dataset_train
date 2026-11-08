@@ -3,7 +3,8 @@
 Prepare local anime images for training: inventory, validation, deduplication,
 tagging, caption review, and reproducible image/sidecar exports.
 
-**Run `trainime` to tag a directory or remove its captions.** The menu is:
+**`trainime` is the directory-action workflow.** It tags missing source sidecars
+or backs up and removes paired captions. The menu is:
 
 ```text
 [1] Tag Image Directory
@@ -113,6 +114,38 @@ works outside this repository and does not depend on a local `config.toml`.
 **Current implementation:** interactive workflows, inventory, validation, exact
 duplicates, local WD tagging, score caching, caption regeneration, and reports.
 Reviewed training exports are pending.
+
+### Two command workflows
+
+`trainime` and `dataset` are separate interfaces with different outputs:
+
+| Command | Purpose | Output and source effects |
+| --- | --- | --- |
+| `trainime tag <directory>` | Interactive or direct directory tagging. | Writes only missing `.txt` sidecars beside source images; existing captions are kept. Uses app data under `%LOCALAPPDATA%\\trainime` on Windows. |
+| `trainime remove <directory>` | Remove paired captions after backup. | Backs up and removes source `.txt` sidecars; images and unrelated files remain. |
+| `dataset scan` | Technical intake inventory. | Read-only; publishes an inventory under the configured `paths.runs`. |
+| `dataset similarity --inventory <inventory-run>` | Find visually similar pair candidates. | Read-only; publishes `images.jsonl` and unreviewed `pairs.jsonl` under `paths.runs`. Pairs require human review and do not remove or group images. |
+| `dataset tag --inventory <inventory-run>` | Local WD inference. | Writes score vectors and caption drafts to a new run under `paths.runs`; source images and captions are not changed. |
+| `dataset recaption --run <tagging-run>` | Reapply caption rules to saved scores. | Writes a new draft run; does not load the model or infer again. |
+
+The technical preparation path is:
+
+```text
+source images + existing captions
+  -> dataset scan                 inventory and exact-byte duplicate references
+  -> dataset similarity           perceptual-hash pair proposals for review
+  -> dataset tag / recaption      separate score and caption-draft runs
+  -> durable human review         planned
+  -> group-aware split and export planned
+  -> pinned trainer import check  planned
+```
+
+The similarity command defaults to a maximum Hamming distance of 8 for its
+64-bit pHash. This is a candidate-generation threshold, not a calibrated duplicate
+rule. It applies a documented orientation, white-padding, grayscale, and resize
+policy; review the image pairs before making any grouping or exclusion decision.
+The current release does not implement durable pair decisions, training exports,
+or a trainer adapter.
 
 - [PLAN.md](PLAN.md): review of the rough notes, pipeline design, acceptance criteria.
 - [TODO.md](TODO.md): implementation status and next work.

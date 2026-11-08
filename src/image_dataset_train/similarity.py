@@ -283,6 +283,9 @@ def propose_similar(
         newline="\n",
     )
     (staging / "summary.json").write_text(_json(summary), encoding="utf-8", newline="\n")
+    metadata["images_sha256"] = file_sha256(staging / "images.jsonl")
+    metadata["pairs_sha256"] = file_sha256(staging / "pairs.jsonl")
+    metadata["summary_sha256"] = file_sha256(staging / "summary.json")
     (staging / "run.json").write_text(_json(metadata), encoding="utf-8", newline="\n")
     final = runs / run_id
     publish_directory(staging, final)

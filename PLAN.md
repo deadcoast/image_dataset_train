@@ -109,6 +109,10 @@ and caption conflicts.
 Use pHash to propose nearby pairs, with an explicitly documented bit length and
 maximum Hamming distance. Do not silently discard similar poses, edits, crops,
 or alternate expressions. Use an index instead of all-pairs comparisons at scale.
+The initial `dataset similarity` stage uses a versioned 64-bit DCT pHash, validates
+source hashes against the inventory, and publishes pair proposals for human review.
+Its default Hamming radius is 8 and can be changed per invocation. The threshold is
+not calibrated for this collection; proposals never mutate or exclude source files.
 Evaluate a local embedding model only if pHash misses important variants on the
 pilot. An embedding threshold has its own metric and is not interchangeable with
 a pHash threshold.
@@ -241,8 +245,9 @@ each stage rather than accepting configuration that silently does nothing.
 
 M1 and the tagging execution contract are tested with generated fixtures; pinned
 SwinV2 CPU inference and reference preprocessing also have local smoke evidence.
-M2-M6 require a representative local collection before quality/performance claims.
-The user requested tagging work next, so M3 proceeded before M2. The code should not search unrelated
+The M2 pHash proposal stage is implemented, but it still needs automated regression
+coverage and representative positive/negative pair evaluation. M2-M6 require a
+representative local collection before quality/performance claims. The code should not search unrelated
 directories for images. Baseline work continues using these defaults; target-specific
 choices are recorded when an actual export profile is introduced.
 
