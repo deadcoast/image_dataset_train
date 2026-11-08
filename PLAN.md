@@ -247,9 +247,10 @@ M1 and the tagging execution contract are tested with generated fixtures; pinned
 SwinV2 CPU inference and reference preprocessing also have local smoke evidence.
 The M2 pHash proposal stage is implemented, but it still needs automated regression
 coverage and representative positive/negative pair evaluation. M2-M6 require a
-representative local collection before quality/performance claims. The code should not search unrelated
-directories for images. Baseline work continues using these defaults; target-specific
-choices are recorded when an actual export profile is introduced.
+representative local collection before quality/performance claims. The code should
+not search unrelated directories for images. Baseline work continues using these
+defaults; target-specific choices are recorded when an actual export profile is
+introduced.
 
 ## Sources checked
 

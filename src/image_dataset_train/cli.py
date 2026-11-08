@@ -28,7 +28,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--runs", type=Path, help="report root override, relative to the current directory"
     )
     similarity = commands.add_parser(
-        "similarity", help="propose perceptually similar image pairs for review; never changes sources"
+        "similarity",
+        help="propose perceptually similar image pairs for review; never changes sources",
     )
     similarity.add_argument("--inventory", type=Path, required=True)
     similarity.add_argument("--config", type=Path, default=Path("config.toml"))
@@ -133,7 +134,10 @@ def main(argv: list[str] | None = None) -> int:
                 f"Images hashed: {summary['images_hashed']}/{summary['images_considered']}; "
                 f"pairs to review: {summary['pairs_proposed']}; errors: {summary['errors']}"
             )
-            print("No source files changed. Proposals are not duplicate decisions.")
+            print(
+                "This command does not write source files. "
+                "Proposals are not duplicate decisions."
+            )
             return 1 if summary["errors"] else 0
 
         def progress(count: int) -> None:

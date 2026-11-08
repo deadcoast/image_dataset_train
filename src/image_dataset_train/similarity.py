@@ -8,12 +8,14 @@ import json
 import math
 import tempfile
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
+from platform import python_version
 from uuid import uuid4
 
 from PIL import Image, ImageOps
+from PIL import __version__ as pillow_version
 
 from image_dataset_train import __version__
 from image_dataset_train.config import Config
@@ -24,6 +26,13 @@ from image_dataset_train.inventory_data import read_inventory
 PHASH_VERSION = "phash64-padded-white-gray-v1"
 PHASH_SIZE = 32
 PHASH_LOW_FREQUENCIES = 8
+_DCT_COSINE = tuple(
+    tuple(
+        math.cos(math.pi * (2 * position + 1) * frequency / (2 * PHASH_SIZE))
+        for position in range(PHASH_SIZE)
+    )
+    for frequency in range(PHASH_LOW_FREQUENCIES)
+)
 
 
 class _BKNode:
@@ -34,7 +43,7 @@ class _BKNode:
 
 
 class _BKTree:
-    """Hamming-distance index used to avoid a full all-pairs comparison."""
+    """Hamming-distance index that prunes comparisons outside the query radius."""
 
     def __init__(self) -> None:
         self.root: _BKNode | None = None
@@ -61,30 +70,21 @@ class _BKTree:
                 node.rows.append((path, digest))
                 break
 
-    def query(self, value: int, radius: int) -> list[tuple[int, str, str]]:
-        matches: list[tuple[int, str, str]] = []
+    def query(self, value: int, radius: int) -> Iterator[tuple[int, str, str]]:
+        """Yield matching hashes in deterministic tree traversal order."""
         if self.root is None:
-            return matches
+            return
         stack = [self.root]
         while stack:
             node = stack.pop()
             distance = self.distance(value, node.value)
             if distance <= radius:
-                matches.extend(
-                    (distance, path, digest) for path, digest in node.rows
-                )
+                for path, digest in node.rows:
+                    yield distance, path, digest
             low, high = distance - radius, distance + radius
-            stack.extend(
-                child for edge, child in node.children.items() if low <= edge <= high
-            )
-        return matches
-
-    def add_and_query(
-        self, value: int, path: str, digest: str, radius: int
-    ) -> list[tuple[int, str, str]]:
-        matches = self.query(value, radius)
-        self.add(value, path, digest)
-        return matches
+            for edge, child in sorted(node.children.items(), reverse=True):
+                if low <= edge <= high:
+                    stack.append(child)
 
 
 def _source_bytes(source: Path, row: dict, max_file_bytes: int) -> bytes:
@@ -138,21 +138,19 @@ def _dct_hash(raw: bytes, max_decode_pixels: int) -> int:
             )
 
     # Separable 2D DCT-II, retaining only the top-left 8x8 coefficients.
-    cosine = [
-        [math.cos(math.pi * (2 * position + 1) * frequency / (2 * PHASH_SIZE))
-         for position in range(PHASH_SIZE)]
-        for frequency in range(PHASH_LOW_FREQUENCIES)
-    ]
     horizontal = [[0.0] * PHASH_SIZE for _ in range(PHASH_SIZE)]
     for y in range(PHASH_SIZE):
         offset = y * PHASH_SIZE
         for frequency in range(PHASH_LOW_FREQUENCIES):
-            basis = cosine[frequency]
+            basis = _DCT_COSINE[frequency]
             horizontal[y][frequency] = sum(
                 pixels[offset + x] * basis[x] for x in range(PHASH_SIZE)
             )
     coefficients = [
-        sum(horizontal[y][x_frequency] * cosine[y_frequency][y] for y in range(PHASH_SIZE))
+        sum(
+            horizontal[y][x_frequency] * _DCT_COSINE[y_frequency][y]
+            for y in range(PHASH_SIZE)
+        )
         for y_frequency in range(PHASH_LOW_FREQUENCIES)
         for x_frequency in range(PHASH_LOW_FREQUENCIES)
     ]
@@ -178,6 +176,7 @@ def propose_similar(
     """Publish review-only perceptual-hash candidates without changing sources."""
     if type(max_distance) is not int or not 0 <= max_distance <= 64:
         raise ValueError("max_distance must be an integer between 0 and 64")
+    started = datetime.now(UTC)
     inventory_meta, records, inventory_hash = read_inventory(inventory)
     source = Path(inventory_meta["source"]).resolve(strict=True)
     runs = config.runs.resolve()
@@ -191,69 +190,91 @@ def propose_similar(
         and row.get("decision") in {"candidate", "review"}
         and isinstance(row.get("sha256"), str)
     ]
+    image_rows.sort(key=lambda row: row["source_path"])
     tree = _BKTree()
-    hashes: list[dict] = []
-    pairs: list[dict] = []
     hash_by_path: dict[str, str] = {}
     errors = 0
-    for number, row in enumerate(image_rows, 1):
-        item = {
-            "source_path": row["source_path"],
-            "sha256": row["sha256"],
-            "phash": None,
-            "decision": "error",
-            "error": None,
-        }
-        try:
-            raw = _source_bytes(source, row, config.validation.max_file_bytes)
-            value = _dct_hash(raw, config.validation.max_decode_pixels)
-            item.update(phash=f"{value:016x}", decision="indexed")
-            hash_by_path[row["source_path"]] = item["phash"]
-            for distance, prior_path, prior_digest in tree.add_and_query(
-                value, row["source_path"], row["sha256"], max_distance
-            ):
-                pairs.append(
-                    {
+    pairs_proposed = 0
+    images_hashed = 0
+    runs.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".pending-similarity-", dir=runs))
+    images_path, pairs_path = staging / "images.jsonl", staging / "pairs.jsonl"
+    with (
+        images_path.open("w", encoding="utf-8", newline="\n") as images_file,
+        pairs_path.open("w", encoding="utf-8", newline="\n") as pairs_file,
+    ):
+        for number, row in enumerate(image_rows, 1):
+            item = {
+                "source_path": row["source_path"],
+                "sha256": row["sha256"],
+                "phash": None,
+                "decision": "error",
+                "error": None,
+            }
+            try:
+                raw = _source_bytes(source, row, config.validation.max_file_bytes)
+                value = _dct_hash(raw, config.validation.max_decode_pixels)
+            except (
+                OSError,
+                ValueError,
+                SyntaxError,
+                Image.DecompressionBombWarning,
+                Image.DecompressionBombError,
+            ) as exc:
+                item["error"] = f"{type(exc).__name__}: {exc}"
+                errors += 1
+            else:
+                item.update(phash=f"{value:016x}", decision="indexed")
+                hash_by_path[row["source_path"]] = item["phash"]
+                images_hashed += 1
+                for distance, prior_path, prior_digest in tree.query(value, max_distance):
+                    pair_identity = "\0".join(
+                        (
+                            PHASH_VERSION,
+                            prior_path,
+                            prior_digest,
+                            row["source_path"],
+                            row["sha256"],
+                        )
+                    )
+                    proposal = {
+                        "pair_id": hashlib.sha256(pair_identity.encode("utf-8")).hexdigest(),
                         "left_source_path": prior_path,
                         "left_sha256": prior_digest,
                         "left_phash": hash_by_path[prior_path],
                         "right_source_path": row["source_path"],
                         "right_sha256": row["sha256"],
-                        "right_phash": f"{value:016x}",
+                        "right_phash": item["phash"],
                         "hamming_distance": distance,
                         "max_distance": max_distance,
                         "review_status": "unreviewed",
                     }
+                    pairs_file.write(
+                        json.dumps(proposal, ensure_ascii=False, sort_keys=True) + "\n"
+                    )
+                    pairs_proposed += 1
+                tree.add(value, row["source_path"], row["sha256"])
+            images_file.write(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n")
+            if progress and number % 100 == 0:
+                progress(
+                    f"Hashed {number:,}/{len(image_rows):,} images; "
+                    f"proposed {pairs_proposed:,} pairs"
                 )
-        except (
-            OSError,
-            ValueError,
-            SyntaxError,
-            Image.DecompressionBombWarning,
-            Image.DecompressionBombError,
-        ) as exc:
-            item["error"] = f"{type(exc).__name__}: {exc}"
-            errors += 1
-        hashes.append(item)
-        if progress and number % 100 == 0:
-            progress(f"Hashed {number:,}/{len(image_rows):,} images; proposed {len(pairs):,} pairs")
 
-    pairs.sort(key=lambda pair: (pair["left_source_path"], pair["right_source_path"]))
     summary = {
         "schema_version": 1,
         "stage": "similarity",
         "training_ready": False,
         "images_considered": len(image_rows),
-        "images_hashed": sum(row["decision"] == "indexed" for row in hashes),
+        "images_hashed": images_hashed,
         "errors": errors,
-        "pairs_proposed": len(pairs),
+        "pairs_proposed": pairs_proposed,
         "max_hamming_distance": max_distance,
         "hash_bits": 64,
         "hash_version": PHASH_VERSION,
         "review_required": True,
-        "source_files_changed": False,
+        "source_write_attempted": False,
     }
-    started = datetime.now(UTC)
     run_id = started.strftime("%Y%m%dT%H%M%S%fZ") + "-" + uuid4().hex[:8]
     metadata = {
         "schema_version": 1,
@@ -266,22 +287,12 @@ def propose_similar(
         "inventory_run": str(inventory.resolve()),
         "inventory_manifest_sha256": inventory_hash,
         "pipeline_version": __version__,
+        "python_version": python_version(),
+        "pillow_version": pillow_version,
         "hash_version": PHASH_VERSION,
         "hash_bits": 64,
         "max_hamming_distance": max_distance,
     }
-    runs.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=".pending-similarity-", dir=runs))
-    (staging / "images.jsonl").write_text(
-        "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in hashes),
-        encoding="utf-8",
-        newline="\n",
-    )
-    (staging / "pairs.jsonl").write_text(
-        "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in pairs),
-        encoding="utf-8",
-        newline="\n",
-    )
     (staging / "summary.json").write_text(_json(summary), encoding="utf-8", newline="\n")
     metadata["images_sha256"] = file_sha256(staging / "images.jsonl")
     metadata["pairs_sha256"] = file_sha256(staging / "pairs.jsonl")

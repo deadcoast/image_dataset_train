@@ -9,8 +9,10 @@
   implemented. Historical package and installed-command evidence is recorded in
   the milestone sections below; it was not rerun for this status update.
 - M2 has an initial read-only pHash proposal command. It publishes a hashed list
-  of image fingerprints and unreviewed candidate pairs. Automated regression
-  coverage and collection-specific threshold qualification remain outstanding.
+  of image fingerprints and unreviewed candidate pairs, streaming pair records
+  into a staged run instead of retaining the full pair list in memory. Automated
+  regression coverage and collection-specific threshold qualification remain
+  outstanding.
 - Durable review decisions, related-image groups, group-aware splits, reviewed
   exports, and pinned trainer import are not implemented. No user collection has
   been scanned or accepted as training-ready.

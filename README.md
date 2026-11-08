@@ -112,7 +112,8 @@ The image directory must be separate from this application-data tree. The comman
 works outside this repository and does not depend on a local `config.toml`.
 
 **Current implementation:** interactive workflows, inventory, validation, exact
-duplicates, local WD tagging, score caching, caption regeneration, and reports.
+duplicates, review-only pHash pair proposals, local WD tagging, score caching,
+caption regeneration, and reports.
 Reviewed training exports are pending.
 
 ### Two command workflows
@@ -121,7 +122,7 @@ Reviewed training exports are pending.
 
 | Command | Purpose | Output and source effects |
 | --- | --- | --- |
-| `trainime tag <directory>` | Interactive or direct directory tagging. | Writes only missing `.txt` sidecars beside source images; existing captions are kept. Uses app data under `%LOCALAPPDATA%\\trainime` on Windows. |
+| `trainime tag <directory>` | Interactive or direct directory tagging. | Writes only missing `.txt` sidecars beside source images; existing captions are kept. Uses app data under `%LOCALAPPDATA%\trainime` on Windows. |
 | `trainime remove <directory>` | Remove paired captions after backup. | Backs up and removes source `.txt` sidecars; images and unrelated files remain. |
 | `dataset scan` | Technical intake inventory. | Read-only; publishes an inventory under the configured `paths.runs`. |
 | `dataset similarity --inventory <inventory-run>` | Find visually similar pair candidates. | Read-only; publishes `images.jsonl` and unreviewed `pairs.jsonl` under `paths.runs`. Pairs require human review and do not remove or group images. |
@@ -143,7 +144,10 @@ source images + existing captions
 The similarity command defaults to a maximum Hamming distance of 8 for its
 64-bit pHash. This is a candidate-generation threshold, not a calibrated duplicate
 rule. It applies a documented orientation, white-padding, grayscale, and resize
-policy; review the image pairs before making any grouping or exclusion decision.
+policy and records a stable pair ID, both source hashes, hash version, Pillow
+version, and inventory hash. Each source is rechecked against its inventory hash
+when read; stop external writers to the collection while a stage runs. Review the
+image pairs before making any grouping or exclusion decision.
 The current release does not implement durable pair decisions, training exports,
 or a trainer adapter.
 
