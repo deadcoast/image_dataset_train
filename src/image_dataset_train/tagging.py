@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import io
 import json
 import tempfile
@@ -21,6 +20,7 @@ from image_dataset_train import __version__
 from image_dataset_train.captions import CAPTION_VERSION, caption_record, check_rules
 from image_dataset_train.config import CaptionConfig, Config, ValidationConfig
 from image_dataset_train.inventory import file_sha256
+from image_dataset_train.inventory_data import read_inventory
 from image_dataset_train.model_bundle import (
     MODELS,
     Label,
@@ -33,20 +33,7 @@ from image_dataset_train.wd_tagger import PREPROCESS_VERSION, WDTagger, prepare_
 
 
 def _read_inventory(directory: Path) -> tuple[dict, list[dict], str]:
-    metadata = json.loads((directory / "run.json").read_text(encoding="utf-8"))
-    if metadata.get("stage") != "inventory" or metadata.get("schema_version") != 1:
-        raise ValueError("tagging requires an inventory run with schema_version=1")
-    if metadata.get("status") not in {"completed", "completed_with_errors"}:
-        raise ValueError("inventory is incomplete")
-    raw = (directory / "manifest.jsonl").read_bytes()
-    digest = hashlib.sha256(raw).hexdigest()
-    if digest != metadata.get("manifest_sha256"):
-        raise ValueError("inventory manifest hash mismatch")
-    rows = [json.loads(line) for line in raw.splitlines() if line.strip()]
-    paths = [row.get("source_path") for row in rows]
-    if any(not isinstance(path, str) for path in paths) or len(set(paths)) != len(paths):
-        raise ValueError("inventory contains invalid or duplicate source paths")
-    return metadata, rows, digest
+    return read_inventory(directory)
 
 
 def _separate(source: Path, paths: list[Path]) -> None:
