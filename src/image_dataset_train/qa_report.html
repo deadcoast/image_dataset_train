@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dataset pilot review</title>
+<style>
+:root{font:15px/1.5 system-ui,sans-serif;color:#20292c;background:#f4f3ee;--line:#d7dad4;--accent:#186551}
+*{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit}button,a{touch-action:manipulation}
+header{padding:22px 30px 18px;border-bottom:1px solid var(--line);background:#fff}
+header small{color:var(--accent);font-weight:650;letter-spacing:.08em;text-transform:uppercase}
+h1{font-size:27px;letter-spacing:-.025em;margin:3px 0}h2{font-size:16px;margin:0 0 10px}
+p{margin:8px 0;color:#57605e}a{color:var(--accent)}button{border:1px solid #bfc7bf;background:#fff;border-radius:5px;padding:7px 12px;cursor:pointer;color:inherit}
+button:hover{background:#eaf0e9}button:disabled{opacity:.45;cursor:default}
+button:focus-visible,a:focus-visible,input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:2px}
+.metrics{display:flex;gap:25px;margin-top:12px;font-variant-numeric:tabular-nums}.metrics strong{font-size:21px;margin-right:5px}
+.layout{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:75vh}
+aside{padding:24px;border-right:1px solid var(--line)}label{display:block;font-weight:600;font-size:13px;margin:0 0 12px}
+input[type=search],input[type=text],input[type=number],select{display:block;width:100%;min-width:0;margin-top:4px;padding:8px;border:1px solid #bfc7bf;border-radius:4px;background:white;color:inherit}
+.check{display:flex;align-items:center;gap:7px;margin:15px 0;font-weight:400}
+main{min-width:0;padding:22px 28px}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
+.workspace{display:grid;grid-template-columns:minmax(190px,28%) minmax(0,1fr);gap:20px}
+.queue{display:flex;flex-direction:column;gap:7px;max-height:650px;overflow:auto;padding:2px}
+.item{text-align:left;padding:10px 12px;overflow-wrap:anywhere}.item small{display:block;color:#67716c;margin-top:4px}
+.item[aria-current=true]{background:#e6efe8;border-color:var(--accent);box-shadow:inset 3px 0 var(--accent)}
+.detail{background:white;border:1px solid var(--line);border-radius:7px;padding:20px;min-width:0}
+.image-area{height:340px;background:#edf0eb;display:flex;justify-content:center;align-items:center;border-radius:4px;margin:12px 0}
+.image-area img{max-width:100%;max-height:100%;object-fit:contain}.muted{font-size:13px;color:#68736c}
+.badges{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}.badge{font-size:12px;padding:3px 8px;background:#edf1ec;border-radius:3px}
+.finding{background:#fff0d8;color:#7c4b12}.caption{white-space:pre-wrap;overflow-wrap:anywhere;border-left:3px solid #b5c8b9;padding:10px 14px;margin:10px 0;background:#f7f9f5}
+.facts{display:grid;grid-template-columns:90px minmax(0,1fr);gap:5px 10px;font-size:14px}.facts dt{color:#68736c}.facts dd{margin:0;overflow-wrap:anywhere}
+.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}
+textarea{width:100%;min-height:65px;padding:9px;border:1px solid var(--line);background:#f8f9f6;font:12px/1.5 ui-monospace,monospace;resize:vertical}
+.coverage{margin-top:25px;padding-top:20px;border-top:1px solid var(--line);overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
+th{color:#68736c;font-weight:500}td button{padding:3px 8px}
+[hidden]{display:none!important}.empty{padding:50px 20px;text-align:center;color:#68736c}
+.editor{border-top:1px solid var(--line);margin-top:20px;padding-top:18px}.editor summary{cursor:pointer;font-weight:650;margin-bottom:14px}
+.editor fieldset{border:0;padding:0;margin:0}.editor textarea{font:14px/1.5 system-ui,sans-serif;min-height:85px}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.editor .check{font-size:13px;margin:6px 0 15px}
+.primary{background:var(--accent);color:#fff;border-color:var(--accent)}.primary:hover{background:#124c3d}
+.status{white-space:pre-wrap;overflow-wrap:anywhere}.error{color:#a52d24}.label-check{display:grid;grid-template-columns:1fr 155px;align-items:center;gap:10px}
+.pilot-summary{background:#e6efe8;padding:16px;border-radius:6px;margin:20px 0}.snapshot-note{font-size:12px;text-transform:uppercase;color:#68736c}
+.workflow-tabs{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}.workflow-tabs button[aria-pressed=true]{background:var(--accent);color:white}
+.qualification{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:20px 0}.qualification strong{display:block;font-size:18px}.receipt-log{white-space:pre-wrap;overflow-wrap:anywhere;max-height:380px;overflow:auto;background:#f7f9f5;padding:12px;font:12px/1.5 ui-monospace,monospace}
+.workflow-pane{max-width:1250px;margin:auto}.pair-layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:22px}
+.pair-images{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.pair-images figure{margin:0;min-width:0}.pair-images figcaption{overflow-wrap:anywhere;font-weight:600}
+.pair-images .image-area{height:300px}.pair-list{max-height:600px;overflow:auto}.publish-results{overflow-wrap:anywhere}.publish-results li{margin:12px 0}
+.report-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:24px}.report-grid section{min-width:0}.report-grid td,.report-grid dd{overflow-wrap:anywhere}.report-grid pre{white-space:pre-wrap;overflow-wrap:anywhere}.report-grid h2{margin-top:24px}.table-scroll{max-height:450px;overflow:auto}.report-grid th{position:sticky;top:0;background:#f4f3ee}.report-grid .facts{grid-template-columns:140px minmax(0,1fr)}
+@media(max-width:750px){.pair-layout{grid-template-columns:1fr}.pair-list{max-height:180px}.pair-images .image-area{height:200px}.fields{grid-template-columns:1fr}}
+@media(max-width:1000px){.layout{grid-template-columns:210px 1fr}.workspace{grid-template-columns:1fr}.queue{max-height:180px}.image-area{height:300px}main{padding:20px}}
+@media(max-width:650px){header{padding:18px}.layout{display:block}aside{border-right:0;border-bottom:1px solid var(--line);padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:8px 15px}aside h2{grid-column:1/-1}label{margin:0}.metrics{gap:15px;flex-wrap:wrap}.image-area{height:250px}main{padding:15px}.toolbar{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<header><small>Dataset preparation / QA</small><h1>Pilot review</h1>
+<p id="context"></p><div class="metrics" id="metrics"></div><p id="saveNotice" role="status"></p>
+<nav id="workflowTabs" class="workflow-tabs" aria-label="Review workflow"><button id="imagesTab" aria-pressed="true">Images &amp; pilot</button><button id="contentTab" aria-pressed="false">Snapshot report</button><button id="pairsTab" aria-pressed="false" hidden>Related pairs</button><button id="publishTab" aria-pressed="false" hidden>Publish</button><button id="trainingTab" aria-pressed="false" hidden>Training import</button></nav><p id="trainingIndicator" class="muted" hidden></p></header>
+<main id="contentPane" class="workflow-pane" hidden>
+<h2>Snapshot content and tagging evidence</h2>
+<label>Population<select id="contentScope"><option value="included">Included images</option><option value="snapshot">All snapshot images</option></select></label>
+<p id="contentCoverage" role="status"></p><p id="contentUnavailable" hidden>This older QA report has no content summary. Generate a new QA report from its saved groups or export.</p>
+<div id="contentDetails"><p class="muted">Counts are source occurrences, including exact-byte aliases. Reviewed annotations, scored observations and rule proposals are separate. Scores and ratings are model outputs; they do not measure accuracy or human acceptance.</p>
+<div class="report-grid">
+<section><h2>Content distributions</h2><p id="annotationCoverage" class="muted"></p><table><thead><tr><th>Reviewed content</th><th>Images</th></tr></thead><tbody id="contentAnnotations"></tbody></table>
+<p id="compositionCoverage" class="muted"></p><table><thead><tr><th>Model composition</th><th>Images</th></tr></thead><tbody id="contentComposition"></tbody></table>
+<p id="proposalCoverage" class="muted"></p><table><thead><tr><th>Proposed subset</th><th>Images</th></tr></thead><tbody id="contentProposals"></tbody></table></section>
+<section><h2>Model rating distribution</h2><p>Each image contributes to its highest-scoring rating. Equal maxima are reported as ties, with no assigned rating.</p><p id="ratingCoverage" class="muted"></p><table><thead><tr><th>Rating</th><th>Images</th></tr></thead><tbody id="contentRatings"></tbody></table>
+<h2>Model and provider provenance</h2><dl id="contentProvenance" class="facts"></dl><p class="muted">Providers describe the recorded inference runtime, including reused scores. Recaptioning reuses that evidence without inference. A provider list does not establish physical GPU execution.</p><details><summary>Full recorded provenance and caption rules</summary><pre id="contentProvenanceJson"></pre></details></section>
+<section><h2>Top observed tags</h2><p>Raw tags above their saved thresholds, including tags omitted by caption policy.</p><p id="observedCoverage" class="muted"></p><div class="table-scroll"><table><thead><tr><th>Tag</th><th>Category</th><th>Images</th></tr></thead><tbody id="contentObserved"></tbody></table></div></section>
+<section><h2>Top caption-selected tags</h2><p>Scored draft tags retained by caption rules. Configured additions and human captions are not model observations.</p><p id="selectedCoverage" class="muted"></p><div class="table-scroll"><table><thead><tr><th>Tag</th><th>Category</th><th>Images</th></tr></thead><tbody id="contentSelected"></tbody></table></div></section>
+</div></div></main>
+<div class="layout" id="imagesPane">
+<aside><h2>Review queue</h2>
+<label>Search<input id="search" type="search" placeholder="Path, caption, or label"></label>
+<label>Finding<select id="finding"><option value="">All findings</option></select></label>
+<label>Label<select id="label"><option value="">All labels</option></select></label>
+<label>Subset<select id="subset"><option value="">All subsets</option></select></label>
+<label>Split<select id="split"><option value="">All splits</option></select></label>
+<label>Decision<select id="decision"><option value="">All decisions</option></select></label>
+<label class="check"><input type="checkbox" id="pilot">Pilot selection only</label>
+<button id="reset">Clear filters</button><p id="groupFilter" class="muted" hidden></p>
+</aside>
+<main><div class="toolbar"><span id="position" aria-live="polite"></span>
+<div><button id="previous">← Previous</button> <button id="next">Next →</button></div></div>
+<div class="workspace"><nav id="queue" class="queue" aria-label="Images"></nav>
+<article class="detail" id="detail"><h2 id="path"></h2><div class="badges" id="badges"></div>
+<div class="image-area"><img id="preview" alt=""><span id="noPreview" class="muted" hidden>Preview unavailable</span></div>
+<div class="actions"><a id="openImage" target="_blank" rel="noopener">Open full image</a><button id="sameGroup">View group</button></div>
+<h2>Snapshot caption</h2><div id="caption" class="caption"></div><p id="captionMeta" class="muted"></p>
+<dl class="facts" id="facts"></dl><div id="findings" class="badges"></div><p id="errors" class="muted"></p>
+<section id="ruleAnalysis" class="editor" hidden><h2>Caption rule analysis</h2><p id="ruleAnalysisText"></p><p id="ruleMissingTags" class="status"></p><p id="ruleIdentity" class="muted status"></p><p class="muted">Scored evidence and configured rules propose a subset. The reviewed subset above controls splits.</p></section>
+<div id="live" hidden>
+<details class="editor" open><summary>Correct saved review</summary>
+<p class="muted">Changes save to the shared CLI review store. Publish new groups and QA/export to refresh snapshot captions and coverage.</p>
+<p id="reviewStatus" class="status" role="status"></p>
+<form id="correctionForm"><fieldset id="correctionFields" disabled>
+<div class="fields"><label>Inclusion decision<select id="editDecision"><option value="unreviewed">Unreviewed</option><option value="include">Include</option><option value="exclude">Exclude</option></select></label>
+<label>Caption action<select id="captionAction"><option value="keep">Keep saved override</option><option value="replace">Save this caption as override</option><option value="clear">Remove override; use source/draft</option></select></label></div>
+<label>Caption override<textarea id="editCaption"></textarea></label>
+<div class="fields"><div><label>Labels (one per line)<textarea id="editLabels"></textarea></label><label class="check"><input id="writeLabels" type="checkbox">Save this label set</label></div>
+<div><label>Subset<input id="editSubset" type="text"></label><button id="useSubsetProposal" type="button" hidden>Use proposed subset</button><label class="check"><input id="writeSubset" type="checkbox">Save this subset (blank clears)</label></div></div>
+<label>Reason for correction<input id="editReason" type="text" required></label>
+<div class="actions"><button class="primary" type="submit">Save corrections</button><button id="reloadReview" type="button">Reload saved values</button></div>
+</fieldset></form></details>
+<details class="editor" open><summary>Assess pilot image</summary>
+<p class="muted">Judge the saved snapshot shown above. Corrections do not change this snapshot. Record remaining problems before producing a revised pilot.</p>
+<p id="assessmentStatus" class="status" role="status"></p>
+<form id="assessmentForm"><fieldset id="assessmentFields" disabled>
+<div class="fields"><label>Image verdict<select id="verdict"><option value="unreviewed">Unreviewed</option><option value="accepted">Accepted</option><option value="needs_changes">Needs changes</option><option value="rejected">Rejected</option></select></label>
+<label>Caption judgment<select id="captionCheck"><option value="not_checked">Not checked</option><option value="correct">Correct</option><option value="incorrect">Incorrect</option></select></label></div>
+<h2>Critical labels</h2><div id="labelChecks"></div>
+<div class="actions"><input id="newCriticalLabel" type="text" aria-label="Additional critical label" placeholder="Additional critical label"><button id="addCriticalLabel" type="button">Add label</button></div>
+<label>Reviewer<input id="reviewer" type="text" required autocomplete="name"></label>
+<label>Assessment notes<textarea id="assessmentNotes" required></textarea></label>
+<div class="actions"><button class="primary" type="submit">Save assessment</button><button id="reloadAssessment" type="button">Reload assessment</button></div>
+</fieldset></form></details>
+</div>
+<div class="actions"><button id="copy">Copy review command</button><span id="copyState" class="muted" role="status"></span></div>
+<textarea id="command" aria-label="Review command" readonly spellcheck="false"></textarea>
+<p class="muted">This report captures a saved revision. Make corrections with the review command, then publish new groups and regenerate QA.</p>
+</article><p id="empty" class="empty" hidden>No images match these filters.</p></div>
+<section id="pilotAssessment" class="pilot-summary" hidden><h2>Recorded pilot assessment</h2><p id="pilotProgress"></p><p id="pilotErrors"></p><p id="pilotConclusion"></p>
+<form id="conclusionForm"><div class="fields"><label>Pilot conclusion<select id="conclusion"><option value="needs_changes">Needs changes</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option><option value="unreviewed">Clear conclusion</option></select></label>
+<label>Reviewer<input id="conclusionReviewer" type="text" required></label></div><label>Conclusion notes<input id="conclusionNotes" type="text" required></label>
+<button class="primary" type="submit">Record pilot conclusion</button><p id="conclusionStatus" role="status"></p></form></section>
+<section class="coverage"><h2>Split coverage</h2><p class="muted">Select a category to inspect its images. Related groups stay together; a category in one group cannot span both splits.</p>
+<table><thead><tr><th>Category</th><th>Groups</th><th>Train</th><th>Validation / target</th><th>Coverage</th></tr></thead><tbody id="coverage"></tbody></table></section>
+</main></div>
+<main id="pairsPane" class="workflow-pane" hidden>
+<div class="toolbar"><div><h2>Related-image pairs</h2><p id="pairProgress" role="status"></p></div><button id="refreshPairs">Reload pair queue</button></div>
+<p>Related images stay in one split. Distinct images must remain in separate groups. Exact-byte aliases always share a group.</p>
+<div class="pair-layout"><div><label>Pair decision filter<select id="pairFilter"><option value="unreviewed">Unreviewed</option><option value="all">All pairs</option><option value="related">Related</option><option value="distinct">Distinct</option></select></label>
+<nav id="pairQueue" class="queue pair-list" aria-label="Pair queue"></nav><div class="actions"><button id="pairPrev">Previous page</button><button id="pairNext">Next page</button></div>
+<details><summary>Compare another pair</summary><p class="muted">Enter two exact inventory paths, including pairs missed by similarity proposals.</p>
+<label>Left image path<input id="manualLeft" type="text" list="imagePaths"></label><label>Right image path<input id="manualRight" type="text" list="imagePaths"></label><datalist id="imagePaths"></datalist><button id="comparePair">Compare images</button></details></div>
+<article class="detail"><p id="pairMessage" class="status" role="status"></p><div id="pairDetail" hidden>
+<div class="pair-images"><figure><figcaption id="leftPairName"></figcaption><div class="image-area"><img id="leftPairImage" alt="Left comparison image"></div></figure><figure><figcaption id="rightPairName"></figcaption><div class="image-area"><img id="rightPairImage" alt="Right comparison image"></div></figure></div>
+<p id="pairInfo" class="muted"></p><form id="pairForm"><fieldset id="pairFields" style="border:0;padding:0"><label>Relationship<select id="pairDecision"><option value="unreviewed">Unreviewed</option><option value="related">Related</option><option value="distinct">Distinct</option></select></label>
+<label>Reason for pair decision<input id="pairReason" type="text" required></label><div class="actions"><button class="primary" type="submit">Save pair decision</button><button id="reloadPair" type="button">Reload this pair</button></div></fieldset></form></div></article></div>
+</main>
+<main id="publishPane" class="workflow-pane" hidden><h2>Publish reviewed snapshots</h2><p id="publicationReadiness" class="status" role="status"></p>
+<p>Each action captures current saved reviews. Groups may be incomplete; exports require completed pair/image decisions and usable captions. Existing snapshots remain unchanged.</p>
+<p id="publicationDestinations" class="muted"></p>
+<form id="publicationForm" class="detail"><fieldset id="publicationFields" style="border:0;padding:0">
+<label>Caption draft run (optional)<input id="publicationCaptions" type="text" placeholder="Tagging or recaption run directory"></label>
+<div class="fields"><label>Validation share (%)<input id="publicationRatio" type="number" min="0" max="99.999" step="any" required></label>
+<label>Split seed<input id="publicationSeed" type="number" step="1" required></label><label>Split balancing<select id="publicationStrategy"><option value="semantic">Reviewed labels and subsets</option><option value="size">Image counts only</option></select></label>
+<label>Trainer resolution<input id="publicationResolution" type="number" min="64" step="64" required></label><label>Training repeats<input id="publicationRepeats" type="number" min="1" step="1" required></label></div>
+<div class="actions"><button id="publishGroups" type="submit" value="groups">Publish groups + QA</button><button id="publishExport" class="primary" type="submit" value="export">Publish groups + verified export</button><button id="refreshPublication" type="button">Refresh review status</button></div>
+</fieldset></form><p id="publicationStatus" class="status" role="status"></p><ul id="publicationOutputs" class="publish-results"></ul><a id="openPublication" hidden>Open the new snapshot in reviewer</a></main>
+<main id="trainingPane" class="workflow-pane" hidden>
+<div class="toolbar"><div><h2>Training import &amp; qualification</h2><p>Evidence for the export captured by this report.</p></div><button id="refreshTraining">Refresh receipts</button></div>
+<p id="trainingMessage" class="status" role="status"></p>
+<div id="trainingContent" hidden>
+<div class="qualification"><div class="detail"><h2>Export integrity</h2><strong id="exportIntegrity"></strong><p id="exportCounts"></p></div><div class="detail"><h2>Current pinned CPU import</h2><strong id="trainingOutcome"></strong><p id="trainingScope">Dataset loading only. Tokenization, GPU execution, and model training are not established.</p></div><div class="detail"><h2>This pilot</h2><strong id="trainingPilot"></strong><p id="trainingPilotProgress"></p></div></div>
+<details><summary>Export and trainer identity</summary><dl class="facts"><dt>Export</dt><dd id="trainingExport"></dd><dt>Export hash</dt><dd id="trainingExportHash"></dd><dt>Trainer pin</dt><dd id="trainingPin"></dd><dt>Dependency pin</dt><dd id="trainingDependencyPin"></dd><dt>Receipt folder</dt><dd id="trainingReceiptRoot"></dd><dt>Refreshed</dt><dd id="trainingCheckedAt"></dd></dl></details>
+<p id="trainingIssues" class="status error" role="status"></p>
+<section class="editor"><h2>Import receipt history</h2><p>Newest first. Older successes remain in history when a later import fails. Receipts for different export bytes or trainer pins do not qualify the current export.</p>
+<label id="receiptSelection" hidden>Recorded import<select id="receiptSelect"></select></label><p id="noReceipts" hidden>No import receipt found in the configured runs folder.</p>
+<article id="receiptDetail" class="detail" hidden><h2 id="receiptHeading"></h2><p id="receiptMessage" class="status"></p>
+<dl class="facts"><dt>Completed</dt><dd id="receiptDate"></dd><dt>Trainer</dt><dd id="receiptPin"></dd><dt>Receipt</dt><dd id="receiptPath"></dd></dl>
+<div class="coverage"><table><thead><tr><th>Split</th><th>Images</th><th>With repeats</th><th>Batches</th><th>Buckets (instances)</th></tr></thead><tbody id="receiptSplits"></tbody></table></div>
+<div id="receiptLinks" class="actions"></div><details><summary>Recorded result</summary><pre id="receiptResult" class="receipt-log"></pre></details></article></section>
+<section class="editor"><h2>Run or repeat the import</h2><p>Run this command in a terminal, then refresh receipts. It writes a separate receipt and loader log; the export stays unchanged. Use <code>dataset trainer-setup</code> once if the CPU runtime is missing, or append <code>--runtime</code> for an existing custom runtime.</p>
+<label>Command shell<select id="trainingShell"><option value="powershell">PowerShell</option><option value="posix">POSIX shell</option></select></label><textarea id="trainingCommand" aria-label="Trainer import command" readonly spellcheck="false"></textarea><div class="actions"><button id="copyTrainingCommand">Copy import command</button><span id="trainingCopyStatus" role="status"></span></div></section>
+</div></main>
+<script id="data" type="application/json">__QA_DATA__</script>
+<script>__QA_SCRIPT__</script>
+</body></html>

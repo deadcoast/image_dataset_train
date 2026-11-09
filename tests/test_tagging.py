@@ -172,6 +172,60 @@ def test_exact_threshold_is_excluded_and_uncertainty_is_retained(labels: list[La
     assert result["uncertain_tags"]
 
 
+def test_caption_additions_do_not_become_subset_or_composition_evidence(labels):
+    scores = np.array([0.9, 0.9, 0.1, 0.1, 0.9, 0.1, 0.1, 0.1], dtype=np.float32)
+    rules = CaptionConfig(
+        trigger="custom style",
+        force_tags=["blue hair", "2girls", "BLUE HAIR"],
+        drop_tags=["blue_hair", "1girl"],
+        subset_rules=[{"name": "Blue", "all_tags": ["blue_hair"], "expect_tags": ["pose_(test)"]}],
+    )
+    check_rules(labels, rules)
+    result = caption_record(labels, scores, rules, 0.35)
+    assert result["caption"] == "custom style, blue hair, 2girls"
+    assert result["selected_tags"] == [] and result["composition"] == "single_subject"
+    assert {item["name"] for item in result["observed_tags"]} == {"blue_hair", "1girl"}
+    assert result["subset_proposal"] == {
+        "value": "blue",
+        "matches": ["blue"],
+        "missing_tags": {"blue": ["pose_(test)"]},
+    }
+    assert "subset_missing_expected_tags" in result["review_flags"]
+    # Removing caption evidence neither repairs conflicting counts nor hides them.
+    scores[6] = 0.9
+    conflict = caption_record(labels, scores, replace(rules, drop_tags=["1girl", "2girls"]), 0.35)
+    assert conflict["composition"] == "unknown"
+    assert "conflicting_girl_counts" in conflict["review_flags"]
+    overlapping = replace(
+        rules,
+        subset_rules=[
+            {"name": "blue", "any_tags": ["blue_hair"], "none_tags": ["solo"]},
+            {"name": "counted", "all_tags": ["1girl"]},
+        ],
+    )
+    result = caption_record(labels, scores, overlapping, 0.35)
+    assert result["subset_proposal"]["value"] is None
+    assert result["subset_proposal"]["matches"] == ["blue", "counted"]
+    assert "subset_rule_conflict" in result["review_flags"]
+    scores[0] = 0.1
+    assert not caption_record(labels, scores, rules, 0.35)["subset_proposal"]["missing_tags"]
+
+
+def test_subset_rule_configuration_rejects_ambiguous_schema_and_unknown_evidence(labels):
+    for options in (
+        {"trigger": "two, phrases"},
+        {"force_tags": [""]},
+        {"subset_rules": [{"name": "missing predicate"}]},
+        {"subset_rules": [{"name": "x", "all_tags": ["solo"], "none_tags": ["solo"]}]},
+        {"subset_rules": [{"name": "x", "any_tags": ["solo"], "typo": True}]},
+    ):
+        with pytest.raises(ValueError):
+            CaptionConfig(**options)
+    for tag in ("blue hair", "general"):
+        with pytest.raises(ValueError):
+            check_rules(labels, CaptionConfig(subset_rules=[{"name": "x", "all_tags": [tag]}]))
+
+
 def test_geometry_channel_order_and_transparency() -> None:
     image = Image.new("RGBA", (2, 4), (10, 20, 30, 255))
     image.putpixel((0, 0), (0, 0, 0, 0))

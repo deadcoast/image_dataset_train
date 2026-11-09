@@ -1,7 +1,18 @@
 # Dataset preparation plan
 
-Reviewed: 2026-10-11. Status: intake, local tagging, and Trainime directory actions implemented;
-similarity review, durable overrides, and training export remain pending.
+Design reviewed: 2026-10-11. Implementation status refreshed: 2026-11-09.
+Intake, local tagging, Trainime directory actions, similarity proposals, durable
+review decisions, caption overrides, and group snapshots are implemented.
+Group-aware splitting, verified image/caption exports, and Kohya configuration
+generation are implemented. Pinned CPU trainer imports pass on generated fixtures;
+representative collection acceptance remains pending. Model training belongs to
+the downstream trainer, as defined in Purpose and scope below.
+Pilot QA reports and browser/CLI navigation now connect captions, reviewed
+annotations, and semantic split coverage. The local reviewer saves image and pair
+corrections and report-bound pilot assessments. It publishes group snapshots,
+verified exports, and refreshed QA through the same core functions as the CLI.
+Its Training import view and `dataset trainer-status` expose export-bound receipts,
+the current pinned import result, and separate pilot qualification status.
 
 Installation and operational recovery are implemented in 0.4.0:
 [install.cmd](install.cmd) owns setup, and [the recovery contract](docs/INSTALLATION.md)
@@ -123,6 +134,13 @@ related-image groups even when multiple variants are retained. Assign the entire
 group to one split; include common source artwork/series identities when known.
 Document transitive grouping so an A-B-C chain cannot silently erase C.
 
+`dataset review` now records related/distinct relationships, including manual links
+outside pHash proposals, and per-image include/exclude decisions. `dataset groups`
+publishes the resulting connected components. Exact-byte aliases remain members;
+distinct relationships that contradict a group are rejected before saving.
+Exclusions are annotations and do not remove group members or source files.
+See [the review contract](docs/REVIEW.md) and [group-aware export](docs/EXPORT.md).
+
 ### 3. Local tagging
 
 Use WD v3 ONNX as the baseline candidate already named in the notes. SwinV2,
@@ -161,6 +179,11 @@ Produce captions from scores plus versioned rules and explicit per-image overrid
 Preserve imported captions separately. Never overwrite manual corrections on a
 rerun. An override records the source hash, rule version, reason, and decision.
 
+Manual overrides are implemented in the separate review store and copied into
+group snapshots. They survive scan/similarity reruns when source path and content
+match. Editing a generated draft does not save an override; use `dataset review`.
+Export now applies overrides before original sidecars and optional model drafts.
+
 Default forced tags and trigger are empty. A user-defined trigger is text; it is
 not necessarily a single tokenizer token. Keep character tags opt-in for the
 initial profile. Keep quality/content findings available even when a profile
@@ -175,7 +198,25 @@ Make explicit include/exclude decisions possible by source path and hash. Conten
 ratings and filename blocklists cannot establish character age or replace review.
 Do not present the missing `safety.py` from the notes as an implemented classifier.
 
+M4 rule semantics: `captions.trigger` prefixes one literal caption phrase and
+`captions.force_tags` appends literal phrases, both empty by default. Configured
+additions never become scored observations. `captions.subset_rules` use explicit
+`all_tags`/`any_tags`/`none_tags` predicates over thresholded raw model names;
+`expect_tags` reports missing evidence only for matched rules. One match proposes
+a subset; overlapping matches require review rather than first-rule selection.
+Neutral composition and conflict findings retain scored evidence even when caption
+rules omit those tags. Proposals remain distinct from human subset annotations;
+only reviewed annotations drive semantic splits. Score-only recaptioning regenerates
+these proposals without editing saved reviews. QA and export retain the rule identity.
+
 ### 5. Split, export, and trainer adapters
+
+Implemented: seeded whole-group allocation toward the requested image ratio,
+immutable copy publication, independent verification, and separate Kohya train/
+validation configurations. A pinned trainer import now checks actual upstream
+discovery, captions, repeats, buckets, and CPU tensors. Reviewed labels and subsets
+now feed deterministic semantic group balancing, with coverage and imbalance reports.
+See [export commands](docs/EXPORT.md).
 
 Default provisional validation ratio: 5%, seed `20261011`. Group before splitting.
 Use group-level deterministic assignment with balancing across configured labels;
@@ -196,6 +237,18 @@ verify it against a pinned trainer revision. A sidecar directory alone is not
 proof that every trainer imports it correctly. [Kohya dataset configuration](https://github.com/kohya-ss/sd-scripts/blob/main/docs/config_README-en.md)
 
 ### 6. Report and QA
+
+Implemented: [`dataset qa` and `qa-list`](docs/QA.md) publish a deterministic
+pilot and navigate image previews, caption origins/findings, reviewed annotations,
+groups, and category coverage. Group reports preview assignments; verified export
+reports preserve published assignments. `dataset review-ui` records caption and
+critical-label judgments, notes, and explicit pilot conclusions in a separate
+assessment history; `dataset assessment` exposes these results in the CLI.
+Snapshot reports now aggregate reviewed content, model composition/subset proposals,
+rating distributions, observed/selected top tags, and pinned model/provider/rule
+provenance for both all members and explicitly included members. Export reports use
+frozen evidence; unavailable observations remain explicit. Measured collection
+accuracy and tokenizer checks remain future work.
 
 Report one run/snapshot: decision counts, dimensions/aspect ratios, exact/near
 duplicate groups, content/rating distributions, top tags, label conflicts,
@@ -224,8 +277,8 @@ data/                         # ignored; may use an external source instead
   runs/<run-id>/              # inventory/reports, then later stage evidence
   models/                    # pinned local model artifacts
   derived/scores/            # reusable complete score vectors
-  reviews/                   # planned rules and image decisions
-  exports/<snapshot-id>/     # planned train/val image-caption pairs
+  reviews/                   # persistent image/pair decisions and caption overrides
+  exports/<snapshot-id>/     # verified train/validation image-caption pairs
 .cache/                       # ignored repository-local tooling cache
 ```
 
@@ -245,8 +298,10 @@ each stage rather than accepting configuration that silently does nothing.
 
 M1 and the tagging execution contract are tested with generated fixtures; pinned
 SwinV2 CPU inference and reference preprocessing also have local smoke evidence.
-The M2 pHash proposal stage is implemented, but it still needs automated regression
-coverage and representative positive/negative pair evaluation. M2-M6 require a
+The M2 pHash proposal stage has generated-fixture regression coverage and an
+isolated wheel execution check, recorded in TODO.md. Durable decisions, manual
+overrides, and group snapshots have generated-fixture integration coverage.
+Representative anime pair evaluation remains pending. M2-M6 require a
 representative local collection before quality/performance claims. The code should
 not search unrelated directories for images. Baseline work continues using these
 defaults; target-specific choices are recorded when an actual export profile is

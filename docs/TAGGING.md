@@ -74,8 +74,65 @@ count repair, tag implication expansion, and generic blacklists are not enabled.
 Caption drafts are named by a hash of the source's relative path, avoiding
 same-stem collisions. The manifest maps drafts back to images. These are review
 artifacts, not trainer-ready pairs. Existing source captions remain untouched.
-Durable manual overrides and reviewed export eligibility are pending; editing a
-draft `.txt` does not establish a persistent override.
+Durable manual overrides now use `dataset review --image <relative-path>
+--caption <text> --reason <reason> --run <similarity-run>`; see
+[review and group snapshots](REVIEW.md). They are saved separately from source
+sidecars and model drafts and survive unchanged-source reruns. Editing a draft
+`.txt` does not establish a persistent override. Recaption still produces model
+drafts; [export](EXPORT.md) now applies reviewed overrides and checks eligibility
+before copying image/caption pairs into whole-group splits.
+
+### Configured caption and subset rules (M4)
+
+`wd-caption-v2` adds opt-in caption phrases and subset proposals:
+
+```toml
+[captions]
+trigger = "custom style"
+force_tags = ["line art"]
+
+[[captions.subset_rules]]
+name = "portraits"
+all_tags = ["portrait"]
+any_tags = ["1girl", "1boy"]
+none_tags = ["multiple_girls", "multiple_boys"]
+expect_tags = ["looking_at_viewer"]
+```
+
+Merge these settings into the existing `[captions]` table. Trigger and forced-tag
+defaults are empty; subset rules default to none. Each configured phrase is literal
+text without commas or line breaks, and may contain multiple words. The trigger
+comes first, model-selected tags follow in score order, and forced phrases come
+last. Case-insensitive duplicates are emitted once. Custom phrases are recorded
+separately; they do not acquire model scores or satisfy subset predicates.
+
+Predicates use exact raw model names whose scores exceed their configured
+thresholds, including names omitted from captions by `drop_tags` or character
+settings. All `all_tags` must occur, at least one `any_tags` must occur when supplied,
+and no `none_tags` may occur. Each rule needs a positive predicate and a unique
+normalized name. Unknown model names and rating-score predicates are refused.
+Ratings remain separate evidence.
+
+Exactly one matching rule produces a proposal. Multiple matches produce
+`subset_rule_conflict` and retain all candidate names without choosing by order.
+`expect_tags` reports missing scored tags only within matched rules; it never adds
+them to captions. Neutral composition is `single_subject`, `multiple_subjects`,
+or `unknown`; contradictory counts produce `unknown` and visible findings even
+when those tags are omitted from captions. Composition does not infer relationships.
+
+Tagging and recaption manifests retain observations, configured additions,
+composition, proposals, flags, caption version, and a rule digest. Changed rules
+use `dataset recaption` with saved scores and perform no inference. They do not
+change source sidecars, saved caption overrides, or reviewed subsets.
+
+QA displays proposal candidates and missing expectations. Accept an inspected
+proposal with **Use proposed subset**, a reason, and **Save corrections**, or use
+`dataset review --image <path> --subset-from <caption-run> --reason <reason>` with
+the original similarity `--run`. Acceptance records the caption run, manifest hash,
+rule version and digest. Manual subset edits remain available. Only reviewed
+subsets affect semantic split balancing. New exports retain the draft manifest
+and its rule analysis independently of the final caption's origin, including when
+a manual/source caption takes precedence.
 
 ## Provenance, cache, and offline operation
 

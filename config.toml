@@ -6,6 +6,15 @@ source = "data/00_inbox"
 runs = "data/runs"
 models = "data/models"
 scores = "data/derived/scores"
+reviews = "data/reviews"
+exports = "data/exports"
+
+[export]
+validation_ratio = 0.05
+seed = 20261011
+resolution = 1024
+repeats = 1
+split_strategy = "semantic"
 
 [validation]
 # Resolution concerns are review flags, not destructive rejection rules.
@@ -28,6 +37,10 @@ character_threshold = 0.85
 keep_characters = false
 uncertainty_margin = 0.05
 drop_tags = []
+# Explicit caption phrases; empty defaults preserve model-only caption output.
+trigger = ""
+force_tags = []
+# Optional [[captions.subset_rules]] tables are documented in docs/TAGGING.md.
 
 [captions.tag_thresholds]
 # Optional overrides use exact CSV names, e.g. blue_hair = 0.5

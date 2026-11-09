@@ -9,6 +9,7 @@ import math
 import tempfile
 import warnings
 from collections.abc import Callable, Iterator
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from platform import python_version
@@ -121,36 +122,31 @@ def _dct_hash(raw: bytes, max_decode_pixels: int) -> int:
         with Image.open(io.BytesIO(raw)) as opened:
             if opened.width * opened.height > max_decode_pixels:
                 raise ValueError("image exceeds configured decode pixel limit")
+            if max(opened.size) ** 2 > max_decode_pixels:
+                raise ValueError("square similarity preparation exceeds configured pixel limit")
             if getattr(opened, "n_frames", 1) != 1:
                 raise ValueError("multiple-frame image is not eligible for similarity")
             image = ImageOps.exif_transpose(opened)
             image.load()
-            if max(image.size) ** 2 > max_decode_pixels:
-                raise ValueError("square similarity preparation exceeds configured pixel limit")
             rgba = image.convert("RGBA")
             side = max(rgba.size)
             canvas = Image.new("RGBA", (side, side), (255, 255, 255, 255))
             canvas.alpha_composite(rgba, ((side - rgba.width) // 2, (side - rgba.height) // 2))
-            pixels = list(
+            pixels = (
                 canvas.convert("L")
                 .resize((PHASH_SIZE, PHASH_SIZE), Image.Resampling.LANCZOS)
-                .getdata()
+                .tobytes()
             )
 
     # Separable 2D DCT-II, retaining only the top-left 8x8 coefficients.
-    horizontal = [[0.0] * PHASH_SIZE for _ in range(PHASH_SIZE)]
+    horizontal = [[0.0] * PHASH_LOW_FREQUENCIES for _ in range(PHASH_SIZE)]
     for y in range(PHASH_SIZE):
         offset = y * PHASH_SIZE
         for frequency in range(PHASH_LOW_FREQUENCIES):
             basis = _DCT_COSINE[frequency]
-            horizontal[y][frequency] = sum(
-                pixels[offset + x] * basis[x] for x in range(PHASH_SIZE)
-            )
+            horizontal[y][frequency] = sum(pixels[offset + x] * basis[x] for x in range(PHASH_SIZE))
     coefficients = [
-        sum(
-            horizontal[y][x_frequency] * _DCT_COSINE[y_frequency][y]
-            for y in range(PHASH_SIZE)
-        )
+        sum(horizontal[y][x_frequency] * _DCT_COSINE[y_frequency][y] for y in range(PHASH_SIZE))
         for y_frequency in range(PHASH_LOW_FREQUENCIES)
         for x_frequency in range(PHASH_LOW_FREQUENCIES)
     ]
@@ -179,17 +175,15 @@ def propose_similar(
     started = datetime.now(UTC)
     inventory_meta, records, inventory_hash = read_inventory(inventory)
     source = Path(inventory_meta["source"]).resolve(strict=True)
+    if not source.is_dir():
+        raise ValueError(f"source must be a directory: {source}")
     runs = config.runs.resolve()
     if source.is_relative_to(runs) or runs.is_relative_to(source):
         raise ValueError("source and similarity output directories must be separate trees")
 
-    image_rows = [
-        row
-        for row in records
-        if row.get("kind") == "image"
-        and row.get("decision") in {"candidate", "review"}
-        and isinstance(row.get("sha256"), str)
-    ]
+    images = [row for row in records if row["kind"] == "image"]
+    image_rows = [row for row in images if row["decision"] in {"candidate", "review"}]
+    exact_duplicates = sum(row["decision"] == "duplicate" for row in images)
     image_rows.sort(key=lambda row: row["source_path"])
     tree = _BKTree()
     hash_by_path: dict[str, str] = {}
@@ -265,6 +259,9 @@ def propose_similar(
         "schema_version": 1,
         "stage": "similarity",
         "training_ready": False,
+        "images_seen": len(images),
+        "exact_duplicates_skipped": exact_duplicates,
+        "ineligible_images_skipped": len(images) - len(image_rows) - exact_duplicates,
         "images_considered": len(image_rows),
         "images_hashed": images_hashed,
         "errors": errors,
@@ -292,6 +289,7 @@ def propose_similar(
         "hash_version": PHASH_VERSION,
         "hash_bits": 64,
         "max_hamming_distance": max_distance,
+        "validation": asdict(config.validation),
     }
     (staging / "summary.json").write_text(_json(summary), encoding="utf-8", newline="\n")
     metadata["images_sha256"] = file_sha256(staging / "images.jsonl")

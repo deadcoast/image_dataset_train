@@ -18,7 +18,13 @@ import numpy as np
 from PIL import Image
 
 from image_dataset_train import __version__
-from image_dataset_train.captions import CAPTION_VERSION, caption_record, check_rules
+from image_dataset_train.captions import (
+    CAPTION_FIELDS,
+    CAPTION_VERSION,
+    caption_record,
+    check_rules,
+    rules_identity,
+)
 from image_dataset_train.config import CaptionConfig, Config, ValidationConfig
 from image_dataset_train.inventory import file_sha256
 from image_dataset_train.inventory_data import read_inventory
@@ -122,6 +128,7 @@ def _publish(
     result_rows = []
     flags = Counter()
     tags = Counter()
+    compositions, proposals = Counter(), Counter()
     for item in rows:
         row = dict(item)
         if row.get("decision") == "tagged":
@@ -134,6 +141,8 @@ def _publish(
             )
             flags.update(record["review_flags"])
             tags.update(tag["name"] for tag in record["selected_tags"])
+            compositions[record["composition"]] += 1
+            proposals[record["subset_proposal"]["value"] or "unassigned"] += 1
         result_rows.append(row)
     manifest = "".join(
         json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in result_rows
@@ -149,6 +158,8 @@ def _publish(
             "decisions": dict(Counter(row["decision"] for row in rows)),
             "review_flags": dict(flags),
             "top_tags": dict(tags.most_common(100)),
+            "compositions": dict(compositions),
+            "subset_proposals": dict(proposals),
             "unique_scored_images": len(vectors),
         }
     )
@@ -162,6 +173,7 @@ def _publish(
             "pipeline_version": __version__,
             "caption_version": CAPTION_VERSION,
             "caption_rules": asdict(rules),
+            "caption_rules_sha256": rules_identity(rules, default_threshold),
             "default_general_threshold": default_threshold,
             "manifest_sha256": file_sha256(pending / "manifest.jsonl"),
             "labels_sha256": file_sha256(pending / "labels.json"),
@@ -327,15 +339,7 @@ def recaption(config: Config, previous: Path) -> tuple[Path, dict]:
         for line in (previous / "manifest.jsonl").read_text(encoding="utf-8").splitlines()
     ]
     for row in rows:
-        for field in (
-            "caption",
-            "selected_tags",
-            "ratings",
-            "uncertain_tags",
-            "review_flags",
-            "effective_general_threshold",
-            "caption_path",
-        ):
+        for field in CAPTION_FIELDS:
             row.pop(field, None)
         if row["decision"] == "tagged" and row["sha256"] not in vectors:
             raise ValueError("missing score vector for tagged image")

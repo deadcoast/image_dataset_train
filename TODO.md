@@ -1,25 +1,325 @@
 # Implementation status
 
-## Current status — 2026-11-07
+## Current status — 2026-11-09
 
 - The installed `trainime` directory workflow and technical `dataset` pipeline are
   separate: the former may write/remove source captions; the latter writes
   inventory, score, and draft artifacts under configured run paths.
 - M1 inventory, WD tagging execution, and Trainime recovery workflows are
-  implemented. Historical package and installed-command evidence is recorded in
-  the milestone sections below; it was not rerun for this status update.
+  implemented. The current full regression run and isolated M2 wheel check are
+  recorded below. Historical model and installed-Trainime evidence retains its
+  original dates.
 - M2 has an initial read-only pHash proposal command. It publishes a hashed list
   of image fingerprints and unreviewed candidate pairs, streaming pair records
-  into a staged run instead of retaining the full pair list in memory. Automated
-  regression coverage and collection-specific threshold qualification remain
-  outstanding.
-- Durable review decisions, related-image groups, group-aware splits, reviewed
-  exports, and pinned trainer import are not implemented. No user collection has
-  been scanned or accepted as training-ready.
+  into a staged run instead of retaining the full pair list in memory. Generated
+  fixture regression coverage passes; collection-specific threshold qualification
+  remains outstanding.
+- Durable pair/image decisions, manual caption overrides, and related-image group
+  snapshots are implemented through `dataset review` and `dataset groups`.
+  Exact-byte aliases retain their individual provenance and decisions.
+- Group-aware splits, verified image/caption exports, independent export
+  verification, and separate Kohya configurations are implemented.
+- Pinned sd-scripts CPU dataset imports pass for generated exports, including
+  mixed formats and training repeats. Each export can receive a separate receipt.
+  The reviewer and `trainer-status` show export-bound receipt history, current-pin
+  qualification, split counts, buckets, and loader logs.
+- Reviewed labels/subsets persist through snapshots and exports; semantic
+  group-aware balancing and per-category coverage reports are implemented.
+- M4 configured caption phrases and subset rules are implemented with score-only
+  regeneration, explicit review acceptance, and preserved rule provenance.
+- Pilot QA reporting and browser/CLI navigation cover captions, annotations,
+  related groups, and split coverage. Direct image corrections and recorded pilot
+  judgments/conclusions are implemented. Graphical related/distinct pair review,
+  manual comparisons, and group/export publication now complete the reviewer flow.
+  Representative collection acceptance remains outstanding. Model training belongs
+  to the downstream trainer; it is not an unfinished application milestone.
 
-The next steps are similarity-stage coverage and pilot calibration, durable review
-records, then group-aware split/export and a pinned trainer import check. Model
-accuracy, physical CUDA, scale, and human acceptance stay separately qualified.
+Development follows [PLAN.md's work order and completion boundaries](PLAN.md#work-order-and-completion-boundaries).
+The [remaining-work reconciliation](#remaining-work-against-the-existing-plan)
+below identifies implemented portions, source gaps, dependencies, and outstanding
+acceptance evidence. The feature entries below are implementation history, not
+replacement milestones. Launching trainer imports from the reviewer was an
+assistant-proposed follow-up, not an established requirement or current priority.
+
+## M6 snapshot reporting source requirements — 2026-11-09
+
+Implemented PLAN section 6's content/rating distributions, top tags, and model/provider
+provenance in the shared QA summary, offline report, graphical reviewer, and CLI.
+Included and whole-snapshot populations stay separate; original run rows outside the
+snapshot cannot contribute. Export reports read frozen evidence with the source and
+caption run offline. Missing legacy observations remain unavailable.
+
+This delivers the requested reporting source work, not M6 collection acceptance.
+The selected collection, measured run resources, corrected pilot errors, and recorded
+user acceptance remain outstanding under the existing plan.
+
+**M5 is implemented:** group-aware splits, verified immutable exports, Kohya adapters,
+and actual pinned CPU import receipts are recorded in the export/trainer entries below
+and [docs/EXPORT.md](docs/EXPORT.md). Those generated-fixture imports establish the
+implementation path. Representative pilot export/import acceptance remains open.
+
+## M4 configured caption and subset rules — 2026-11-09
+
+Implements PLAN section 4: empty-default trigger/forced phrases, explicit raw-tag
+subset predicates and conditional expectations, neutral composition, and visible
+conflicts. Rules generate proposals; reviewed annotations still control splits.
+CLI and graphical acceptance record the caption run and rule identity. Recaptioning
+reuses scores and preserves saved reviews; exports retain independently verifiable
+rule evidence even when a manual/source caption takes precedence.
+
+Verification: **268 passed, 2 skipped** (`.cache/m4-final.xml`). Three focused cases
+exercise evidence/addition separation, rule conflicts and schema, score-only replay,
+CLI/GUI acceptance, manual override preservation and source-independent export QA.
+Generated workflow evidence is under `.cache/m4-smoke/eb5cc662`; actual CLI
+recaptioning inferred zero images, and browser acceptance saved/reloaded the subset.
+Its `evidence.json` records the verified export and unchanged sources. Ruff,
+JavaScript syntax, wheel/sdist builds and source-resource checks pass; build
+artifacts are under `.cache/m4-build`.
+Browser screenshot capture timed out; visual layout acceptance remains unverified.
+This closes the identified M4 source gap, not representative caption accuracy or
+collection acceptance. The existing M2-M6 qualification dependencies remain below.
+
+## Graphical trainer receipts and qualification — 2026-11-09
+
+- [x] Discover exact-export receipts and identify the latest current-pin result;
+  retain failed, historical, mismatched, and damaged receipt states.
+- [x] Add a Training import tab with refresh, split/repeat/bucket details, receipt
+  JSON and loader log links, and copyable import commands for both shell families.
+- [x] Show export integrity, CPU import, and report-bound pilot assessment separately.
+- [x] Share receipt interpretation with `dataset trainer-status`; retain portable
+  hash matching and leave export artifacts unchanged.
+- [x] Refuse to publish an import receipt if the export identity changed during loading.
+
+Verification: **265 passed, 2 skipped** (`.cache/trainer-receipts-final.xml`), with
+two focused cases covering history precedence, export identity, relocation,
+changed evidence, CLI status, and graphical artifact routes. Actual pinned CPU
+import passed at `.cache/trainer-ui-smoke/3d779627/runs/20261109T092828423603Z-trainer-9602f377`:
+2 training images / 4 repeated instances, 1 validation image, 384x256 buckets.
+Browser interaction verified the transition from Not checked to Passed, receipt
+details, loader-log access, and persistence after reload. Screenshot capture was
+unavailable in the browser tool; visual layout acceptance remains unverified.
+`evidence.json` records unchanged export/source hashes. Ruff, JavaScript syntax,
+and wheel/sdist resource checks pass under `.cache/trainer-receipts-build`.
+This is generated-fixture CPU loading evidence, not model training or collection acceptance.
+
+## Graphical pair review and publication — 2026-11-09
+
+- [x] Compare proposed and manual pairs with verified previews, decision filters,
+  pagination, saved reasons, and shared CLI revision/conflict handling.
+- [x] Make saved manual links navigable and count reset links as unresolved.
+- [x] Publish immutable groups and QA, or groups plus a verified training export
+  and QA, with configurable splits, caption drafts, resolution, and repeats.
+- [x] Keep publication responsive, show progress and output paths, retain earlier
+  successful outputs on failure, and open new reports within the reviewer.
+- [x] Retain caption draft provenance for subsequent export publication.
+
+Browser evidence: `.cache/pair-ui-smoke/abb904f5/evidence.json` records generated
+PNG/TIFF pair review (one related, two distinct), two groups, and publication from
+the reviewer. The verified export contains two training images and one validation
+image with training repeats set to two; related images stay together. Source
+hashes and the original QA artifacts are unchanged. `publication.jpg` shows the
+completed operation, and the new report opened with published split assignments.
+These fixtures establish workflow behavior, not real collection acceptance.
+
+Verification: **263 passed, 2 skipped** (`.cache/pair-publication-final.xml`). Two
+focused cases cover pair navigation/reset, stale edits, conflict handling, partial
+publication results, caption provenance, and verified exports. Ruff and both
+JavaScript syntax checks pass. Wheel/sdist and resource checks are recorded under
+`.cache/pair-publication-build`.
+
+## Graphical corrections and recorded pilot assessment — 2026-11-09
+
+- [x] `dataset review-ui` serves a loopback browser app for caption overrides,
+  inclusion decisions, labels, subsets, and reasons using the shared CLI review store.
+- [x] Preserve concurrent changes with review-revision checks and reload controls;
+  retain source hashes, immutable QA data, and existing review history.
+- [x] Record report-bound image judgments, caption checks, critical-label errors,
+  reviewer notes, progress, and explicit pilot conclusions with durable history.
+- [x] Expose saved pilot results through `dataset assessment`; keep export QA
+  assessment available when source images are offline.
+- [x] Separate browser logic into a packaged JavaScript resource, shared by saved
+  reports and the local reviewer. Full images are served from verified snapshot identities.
+
+Browser evidence: `.cache/review-ui-smoke/3625a1f9` contains generated fixtures,
+unchanged-source hashes, a saved graphical correction, two pilot judgments, and a
+persisted needs-changes conclusion. Actual browser saves and reload persistence
+were checked, including a missing critical label. Screenshot: `pilot-assessment.jpg`.
+These are automated fixture judgments, not human acceptance of a real collection.
+At this milestone, pair decisions and publishing new groups/exports were CLI
+operations; the later pair-review milestone above adds the graphical workflow.
+
+Verification: **261 passed, 2 skipped** (`.cache/review-ui-final.xml`). Two focused
+integration cases cover real HTTP corrections, shared CLI state, stale edits,
+new verified exports, and assessment persistence/conclusion history. The browser
+correction also reached a new verified export with source hashes unchanged;
+`evidence.json` records that chain. Ruff, JavaScript syntax, and package-resource
+checks pass. Wheel/sdist output is under `.cache/review-ui-build`.
+
+## Pilot QA reports and navigation — 2026-11-08
+
+- [x] Generate image previews, caption/annotation findings, and category coverage
+  from unfinished group snapshots or verified, source-independent exports.
+- [x] Select a repeatable coverage-focused pilot while retaining the full queue;
+  distinguish preview splits from published assignments and reviewed empty annotations.
+- [x] Add local browser search/filter/group/category navigation and matching
+  `qa-list` pagination, with commands leading back to existing review records.
+- [x] Keep reports separate from source files, review state, and input snapshots.
+
+Verification: **259 passed, 2 skipped** (`.cache/qa-final.xml`), including two
+focused integration cases for incomplete reviews, source drift, deterministic
+sampling, annotation/coverage filters, and exports with their source offline.
+An actual CLI report for the eight-image generated export is at
+`data/runs/20261108T142431476729Z-qa-756cb373/report.html` (four selected pilot images).
+Filtering that report by label, split, and pilot selection and following its
+emitted command returned the correct original review record and annotations.
+Ruff, JavaScript syntax, and wheel/sdist resource checks pass. The managed browser blocked local
+`file://` navigation; rendered interaction remains unverified. Generated fixtures
+do not establish collection accuracy or human acceptance.
+
+## Reviewed annotations and semantic splits — 2026-11-08
+
+- [x] Add/remove/clear human labels and set/clear a semantic subset through
+  `dataset review`, preserving captions and inclusion decisions under the review lock.
+- [x] Track explicit empty choices separately from unreviewed annotations; list
+  included images still needing annotations with `--unannotated`.
+- [x] Carry hash-bound annotations and their reasons into group/export snapshots;
+  reverify export annotations against captured review provenance.
+- [x] Balance whole groups using reviewed multi-label/subset counts, preserving
+  the primary image-ratio objective and the prior allocator for unannotated data.
+- [x] Report per-category split counts, single-group limitations, missing coverage,
+  mixed-subset groups, and annotation completeness. Excluded images do not count.
+
+Verification: **257 passed, 2 skipped** (`.cache/semantic-final.xml`). Focused
+cases cover annotation edits/reruns, changed-byte invalidation, CLI navigation,
+overlapping labels, mixed/rare groups, deterministic allocation, and export integration.
+Generated end-to-end evidence is under `.cache/semantic-smoke/46d647e2`: eight
+images in four related groups, with both categories represented equally in each
+split after balancing. Source hashes were unchanged. Pinned CPU trainer import
+passed at `data/runs/20261108T123908380429Z-trainer-86f5c9e8` (4 training images,
+8 instances with repeats, 4 validation images). No real collection accuracy or
+globally optimal split claim follows from these checks.
+
+## Pinned trainer import and compatible derivatives — 2026-11-08
+
+- [x] Add `dataset trainer-setup` and `dataset trainer-check`, with a separate
+  pinned Python 3.12 CPU runtime and unmodified sd-scripts v0.12.3 at
+  `cb70b96858477e716a2096292ab8aab433277f38`.
+- [x] Run upstream configuration parsing, dataset discovery, caption reading,
+  repeats, bucketing, decoding, crop/resize, and finite tensor checks offline.
+- [x] Publish export-bound receipts and loader logs separately; retain failure
+  evidence without rewriting an export's qualification flags.
+- [x] Resolve observed loader gaps: TIFF conversion, EXIF orientation, white
+  alpha compositing, and zero-sized buckets from tiny/extreme-aspect images.
+  Original files remain untouched; derivatives have separate recorded hashes.
+
+Actual CLI evidence: ordinary export import passed at
+`data/runs/20261108T094454819525Z-trainer-de11f767`; mixed TIFF/alpha/EXIF import
+passed at `data/runs/20261108T094608640027Z-trainer-ec477643` (2 train images,
+6 instances with repeats, 1 validation image, three valid aspect-ratio buckets).
+The mixed fixture/export and unchanged-source hashes are under
+`.cache/trainer/qualification-be9946da`. The initial tiny-image failure is retained
+at `data/runs/20261108T094308540235Z-trainer-d1a5dd0e`.
+No mocks replaced trainer loading functions. No tokenizer, model training step,
+GPU execution, anime-collection accuracy, or human acceptance is claimed.
+
+Final verification: **254 passed, 2 skipped** (`.cache/trainer-final.xml`);
+Ruff lint/format and whitespace checks pass. Wheel/sdist build under
+`.cache/trainer-build` includes the worker and pinned dependency resources.
+Final mixed-export CLI receipt after runtime checks were finalized:
+`data/runs/20261108T094913631642Z-trainer-02a7d4b3`.
+Setup succeeds on repeat without network when installed dependency pins match.
+
+## Group-aware splits and verified export — 2026-11-08
+
+- [x] Deterministic whole-group train/validation allocation with configurable seed
+  and ratio, actual counts, and small-collection warnings.
+- [x] Apply manual overrides, source sidecars, and optional tagging/recaption
+  drafts in that order; publish only explicitly included occurrences.
+- [x] Copy original image bytes and normalized captions to unique pairs; freeze
+  split assignments, review provenance, and checksums in each new snapshot.
+- [x] Verify copied pairs and group/byte split isolation before publication;
+  independently reverify snapshots without their original source collection.
+- [x] Generate separate Kohya train/validation TOML with configurable resolution
+  and repeats, aspect-ratio bucketing, and no upscaling.
+
+Five focused integration cases cover real caption publication, review-to-export
+flow, deterministic reruns, alias preservation, exclusions, changed image/sidecar
+bytes, missing captions, orphan files, source-offline verification, and CLI use.
+Commands: [docs/EXPORT.md](docs/EXPORT.md). Trainer import, collection quality,
+and semantic label balancing are not established by these checks.
+
+Verification: **250 passed, 2 skipped**; `.cache/export-final.xml` and
+`.cache/pytest-export-final`. Ruff lint/format and whitespace checks pass.
+The actual `dataset.exe` entry point also verified the generated CLI export.
+The two skips remain Windows symlink privilege and case-only caption names.
+The initial full run caught one changed scan-output assertion, corrected before
+the passing run; its receipt remains `.cache/export-full.xml`.
+
+## Durable review and group snapshots — 2026-11-07
+
+- [x] List pending pairs/images; record related/distinct pair decisions and
+  include/exclude image decisions, each with a reason and revision history.
+- [x] Manually link related artwork outside the pHash proposal list.
+- [x] Save/clear manual caption overrides independently of inclusion decisions;
+  preserve source captions and generated drafts.
+- [x] Persist review state atomically under a writer lock, bound to source paths
+  and hashes. Reuse unchanged-source decisions and report stale records.
+- [x] Publish deterministic group membership, retaining exact-byte aliases,
+  individual decisions, captions, and history. Reject transitive contradictions
+  before saving edits; recheck source images before publication.
+- [x] Distinguish incomplete review snapshots from completed reviews and keep
+  training readiness false until export/trainer validation exists.
+
+Commands and storage contract: [docs/REVIEW.md](docs/REVIEW.md). Generated-fixture
+integration checks cover the persistent workflow, CLI navigation/manual links,
+transitive conflicts, changed sources, caption preservation, and unchanged-source
+reruns. Source/sidecar bytes remain unchanged. Source-sidecar revalidation and
+applying overrides to final captions remain export-stage work.
+
+Verification: **245 passed, 2 skipped** in the full source suite;
+`.cache/review-suite.xml` and `.cache/pytest-review-suite`, with fresh bytecode
+under `.cache/pyc-review`. Ruff lint/format and diff whitespace checks pass.
+The two skips remain Windows symlink privilege and case-only caption names.
+The three added integration tests exercise the new review implementation; the
+earlier 38 similarity tests are separate historical work. These results establish
+source execution and preservation, not a rendered reviewer, installed release,
+collection acceptance, export compatibility, or training quality.
+
+## M2 proposal execution qualification — 2026-11-07
+
+- [x] 38 new regression cases cover real Pillow image variants, EXIF/alpha
+  preparation, Hamming-index results against exhaustive comparison, stable pair
+  IDs, deterministic artifacts, streamed writes, source preservation, changed
+  sources, malformed inventories, decode limits, interruption, failed publication,
+  CLI exit codes, optional-dependency isolation, and a real Windows junction.
+- [x] Fix malformed inventory objects/rows that crashed or silently omitted
+  eligible images. Validate schema, paths, kinds, decisions, reasons, and hashes
+  before downstream output creation; tagging shares the inventory reader.
+- [x] Reject a source root replaced by a file; check padded-square limits before
+  decoding; remove deprecated Pillow pixel access without changing the hash policy.
+- [x] Record current validation limits and reconcile total images, considered
+  images, exact duplicate aliases skipped, and ineligible images skipped.
+
+Verification: **242 passed, 2 skipped**, `.cache/m2-final.xml`, using
+`.cache/pytest-m2-final-v2` and a fresh `.cache/pyc-m2-current` bytecode cache. Both
+Windows junction tests pass. The skips remain Windows symlink privilege and
+case-only caption names. Ruff lint/format and diff whitespace checks pass.
+Wheel and sdist built offline under `.cache/m2-build`.
+
+An isolated non-editable wheel, with no NumPy/ONNX runtime installed, ran
+`dataset scan` and `dataset similarity` on generated PNG/BMP variants and an exact-byte
+alias. Counts reconciled, one review pair was produced, and every source image and
+manual caption hash remained unchanged. Evidence:
+`.cache/m2-wheel-smoke/0e6d97a31665457b91db6f3c80f7874c/verification.json`
+and adjacent command logs.
+
+The checkout had a stale editable install and pytest bytecode referring to its
+previous path. Locked environment sync repaired the install; a fresh local bytecode
+cache resolved a traceback-source test failure. Initial failing regression
+evidence remains in `.cache/similarity-initial.xml` and `.cache/m2-qualified.xml`.
+These checks establish proposal execution and preservation, not anime similarity
+accuracy, collection-scale throughput, approved groups, or training readiness.
+See [the similarity contract](docs/SIMILARITY.md).
 
 ## Trainime 0.5.1: numeric repair registry and dispatch
 
@@ -205,7 +505,10 @@ Workflow design and research links: [docs/TRAINIME.md](docs/TRAINIME.md).
 Anime accuracy, physical CUDA, large-collection performance, reviewed export,
 and trainer acceptance remain pending.
 
-## Current boundary
+## Initial M1/M3 qualification boundary (historical)
+
+The current implementation status and later export/import evidence are recorded
+at the top of this document. The following preserves the earlier milestone boundary.
 
 M1, WD tagging, and the `trainime` interactive directory workflow are implemented.
 The pinned SwinV2 model has
@@ -244,20 +547,63 @@ Windows, Python 3.12.10, Pillow 12.3.0, pytest 9.1.1, Ruff 0.17.0.
 These checks establish intake behavior and packaging. They do not establish
 anime tagging accuracy, large-collection performance, or training readiness.
 
-## Next implementation
+## Remaining work against the existing plan
 
-1. Add and qualify tests for the read-only M2 pHash proposal stage on generated positive and negative pairs.
-2. Review representative anime pairs and calibrate proposal thresholds; record false-match and missed-match behavior.
-3. Add durable related-image groups and per-image review decisions without automatic source moves.
-4. Add group-aware deterministic splits, verified immutable image/caption exports, and a Kohya adapter.
-5. Verify export with a pinned trainer import, then qualify pilot and full-collection QA.
+Reconciled 2026-11-09 against the existing M1-M6 work order, caption configuration
+and normalization, tagging artifacts, QA generation, and the implementation history
+above. This replaces the stale next-work list and the unsupported successive
+"next source milestone" declarations. It does not redefine the product scope.
+
+`PLAN.md` contains the reviewed design and work order. `TAGGING-METHODS.md` preserves
+the original proposals, including examples explicitly corrected by that plan.
+`docs/TRAINIME.md` and `docs/INSTALLATION.md` define the separate installed workflow.
+The later graphical features were explicitly requested in this development thread;
+their delivery does not complete every requirement in the underlying milestones.
+
+| Existing milestone / source | Implemented portion | Remaining work and dependency | Completion boundary from the plan |
+| --- | --- | --- | --- |
+| **M1 — intake**, PLAN section 1 | Inventory, validation, exact duplicates, source preservation, CLI/configuration and reports. | No additional M1 source gap established by this reconciliation. Preserve the existing behavior through later stages. | Deterministic intake, complete hashes, caption collision/decode handling, build and CLI evidence. |
+| **M2 — similarity**, PLAN section 2 | Indexed pHash proposals, durable pair/image review, exact aliases, related groups and graphical comparisons. | Representative positive/negative pair review, false/missed-match evaluation, threshold calibration, and time/disk behavior at the intended collection size remain unqualified. Requires an explicitly selected collection. | Preserve unique variants; validate pair behavior and scale on that collection. |
+| **M3 — tagging**, PLAN section 3 and docs/TAGGING.md | Pinned WD profiles, reference preprocessing, raw scores, cache/resume, CPU/provider handling and score-only recaptioning. | Compare SwinV2/EVA02 on the same reviewed pilot; measure label precision/recall, composition errors, speed and memory, then check calibrated thresholds on held-out images. Physical GPU and alternate weights need their own qualification. | Reference parity, offline/resumable execution, and collection-specific evidence; published benchmarks are not local acceptance. |
+| **M4 — captions and review**, PLAN section 4 | Threshold/exclusion rules, opt-in triggers/forced phrases, configured subset proposals, neutral composition/conflicts, durable overrides, explicit proposal acceptance, manual annotations and pilot assessments. | The identified rule configuration/normalization source gap is implemented. Accurate captions and subset-rule suitability still require representative pilot review; no collection acceptance is claimed. | Versioned deterministic rules, empty forced-tag/trigger defaults, preserved overrides, visible disagreements/exclusions, and reviewed nonempty pilot captions. |
+| **M5 — export**, PLAN section 5 | Whole-group semantic splits, immutable pairs, independent verification, Kohya configurations and pinned CPU import receipts. | Representative pilot export/import acceptance remains outstanding; existing imports establish generated-fixture behavior. Depends on the reviewed M2-M4 inputs. | No group leakage, collisions, missing captions or unresolved blocking decisions; actual pinned trainer import. |
+| **M6 — full collection**, PLAN section 6 and M6 acceptance row | Snapshot QA, pilot navigation, split coverage, caption findings, recorded judgments, content/rating distributions, top tags, and model/provider/rule provenance. | The identified reporting source gap is implemented with explicit membership and evidence coverage. Collection-wide counts, time/disk measurements, addressed pilot errors and user acceptance remain outstanding. | A qualified batch run with reconciled counts, measured resources, corrected pilot problems and recorded user review. |
+| **Trainime and installation**, docs/TRAINIME.md and docs/INSTALLATION.md | Installed directory tagging/removal, exact four-choice menu, settings, recovery, diagnostics and repair registry have recorded milestone evidence. | Preserve this separate workflow and its source-side caption semantics. Later technical-pipeline GUI work does not extend the Trainime menu contract or automatically requalify its installed version. | The documented menu, preview, source/backup, recovery and installed-command contracts. |
+
+### Source work supported by the remaining requirements
+
+1. **M4 caption/subset rules — source implementation delivered:** semantics are
+   recorded in PLAN section 4 and docs/TAGGING.md. Rule identity now follows
+   recaptioning, accepted reviews and export evidence; pilot accuracy remains open.
+2. **M6 content reporting — source implementation delivered:** snapshot membership,
+   separate included counts, rating ties, missing observations, tag rankings and
+   frozen model/provider provenance now follow PLAN section 6. Full-collection
+   execution and acceptance remain open.
+
+Delivered source work does not establish collection qualification.
+The M2/M3/M4 pilot evidence requires a selected collection and reviewed examples;
+M5 representative export acceptance follows that pilot, and M6 collection execution
+follows correction of its findings. Additional GUI conveniences do not change this
+dependency order.
+
+### Explicitly conditional or downstream work
+
+- Normalized-pixel matching is a later extension; embeddings are conditional on
+  demonstrated pHash misses (PLAN section 2).
+- Camie is a researched separate-backend candidate, not the next required model
+  integration (docs/TAGGING.md).
+- Natural-language caption adapters and tokenizer/truncation checks depend on an
+  actual target profile (PLAN design decision 6 and section 6).
+- ComfyUI inspection is optional. Model training is downstream (PLAN purpose/scope
+  and section 6).
 
 ## Pending evidence
 
 - Real images: readability, size distribution, caption collisions, duplicate rate.
 - Similarity: calibrated false-match/missed-match behavior on anime artwork.
 - Tagging: throughput and accuracy on this collection; alternate models and physical GPU inference.
-- Export: pinned trainer import and repeat/bucket behavior.
+- Export: pinned CPU import and repeat/bucket behavior have generated-fixture evidence;
+  representative collection export/import acceptance remains pending.
 - Dataset acceptance: image/caption review; automated tests cannot establish it.
 
 ## M3 and initial caption rules: implemented

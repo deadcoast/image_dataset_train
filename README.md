@@ -112,9 +112,10 @@ The image directory must be separate from this application-data tree. The comman
 works outside this repository and does not depend on a local `config.toml`.
 
 **Current implementation:** interactive workflows, inventory, validation, exact
-duplicates, review-only pHash pair proposals, local WD tagging, score caching,
-caption regeneration, and reports.
-Reviewed training exports are pending.
+duplicates, pHash pair proposals, durable human decisions and caption overrides,
+related-image group snapshots, local WD tagging, score caching, caption regeneration,
+and reports.
+Group-aware training exports and independent snapshot verification are implemented.
 
 ### Two command workflows
 
@@ -126,6 +127,17 @@ Reviewed training exports are pending.
 | `trainime remove <directory>` | Remove paired captions after backup. | Backs up and removes source `.txt` sidecars; images and unrelated files remain. |
 | `dataset scan` | Technical intake inventory. | Read-only; publishes an inventory under the configured `paths.runs`. |
 | `dataset similarity --inventory <inventory-run>` | Find visually similar pair candidates. | Read-only; publishes `images.jsonl` and unreviewed `pairs.jsonl` under `paths.runs`. Pairs require human review and do not remove or group images. |
+| `dataset review --run <similarity-run>` | List pairs; use `--images` to list images. Save decisions with `--pair`, `--link`, or `--image`. | Reads by default. Edits persist under `paths.reviews`, bound to source paths and hashes; source images and captions remain unchanged. |
+| `dataset groups --run <similarity-run>` | Publish the current related-image groups and review state. | Writes a new snapshot under `paths.runs`, retaining every eligible occurrence and its decisions. Does not split, copy, or export images. |
+| `dataset export --groups <groups-run>` | Split whole groups and select reviewed captions. | Copies included images and captions to a new verified snapshot under `paths.exports`; preserves source files. Optional `--captions <tagging-run>` supplies missing drafts. |
+| `dataset verify-export --run <export-run>` | Recheck a published export. | Read-only; verifies pairs, hashes, membership, and split consistency without the source collection. |
+| `dataset qa --run <groups-or-export-run>` | Inspect captions, annotations, and split coverage. | Writes a new local browser report, image previews, and reproducible pilot selection under `paths.runs`; source files and review state stay unchanged. |
+| `dataset qa-list --run <qa-run>` | Filter and page through QA findings in the terminal. | Reads the saved report and prints commands for the matching review records. |
+| `dataset review-ui --run <qa-run>` | Review images and related pairs, assess the pilot, and publish from a local browser. | Saves decisions and judgments under `paths.reviews`; publishes new groups/QA under `paths.runs` and verified exports under `paths.exports`; preserves source files. |
+| `dataset assessment --run <qa-run>` | Inspect recorded pilot results. | Reads progress, critical-label errors, reviewer notes, and the explicit pilot conclusion. |
+| `dataset trainer-setup` | Prepare the pinned CPU dataset-loader runtime. | Downloads into `.cache/trainer`; keeps tagging dependencies separate. |
+| `dataset trainer-check --run <export-run>` | Import pairs with the pinned sd-scripts loader. | Writes a qualification receipt under `paths.runs`; checks captions, repeats, buckets, and CPU tensors without model training. |
+| `dataset trainer-status --run <export-run>` | Inspect the current import result and receipt history. | Reads export-bound receipts under `paths.runs`; the reviewer's Training import tab shows the same evidence and loader logs. |
 | `dataset tag --inventory <inventory-run>` | Local WD inference. | Writes score vectors and caption drafts to a new run under `paths.runs`; source images and captions are not changed. |
 | `dataset recaption --run <tagging-run>` | Reapply caption rules to saved scores. | Writes a new draft run; does not load the model or infer again. |
 
@@ -133,12 +145,17 @@ The technical preparation path is:
 
 ```text
 source images + existing captions
-  -> dataset scan                 inventory and exact-byte duplicate references
-  -> dataset similarity           perceptual-hash pair proposals for review
-  -> dataset tag / recaption      separate score and caption-draft runs
-  -> durable human review         planned
-  -> group-aware split and export planned
-  -> pinned trainer import check  planned
+  -> dataset scan -> inventory
+       |-> dataset similarity -> pair proposals
+       |-> dataset tag -> scores + caption drafts -> dataset recaption
+
+pair proposals -> dataset review -> dataset groups
+caption drafts -> human inspection -> dataset review --image ... --caption ...
+  -> dataset qa -> dataset review-ui -> image/pair corrections + pilot assessment
+                                  -> Publish -> new groups + QA or verified export + QA
+  -> dataset export -> verified train/validation pairs
+  -> dataset qa -> inspect frozen export captions and split coverage
+  -> dataset trainer-check -> CPU import receipt
 ```
 
 The similarity command defaults to a maximum Hamming distance of 8 for its
@@ -148,12 +165,30 @@ policy and records a stable pair ID, both source hashes, hash version, Pillow
 version, and inventory hash. Each source is rechecked against its inventory hash
 when read; stop external writers to the collection while a stage runs. Review the
 image pairs before making any grouping or exclusion decision.
-The current release does not implement durable pair decisions, training exports,
-or a trainer adapter.
+Similarity and tagging each consume the inventory; neither consumes the other's
+output. Exact-byte aliases remain in that inventory and are skipped during pHash
+proposal generation. Reports and CLI summaries distinguish these aliases from
+ineligible images. See [similarity commands and artifacts](docs/SIMILARITY.md).
+Use [review commands](docs/REVIEW.md) to record related/distinct pairs, manually
+link artwork missed by pHash, include/exclude images, and preserve caption overrides.
+Review also supports explicit labels and one semantic subset per image. Export
+balances these annotations across whole groups and reports rare/missing categories;
+`--split-strategy size` retains image-count-only allocation.
+Use [pilot QA](docs/QA.md) to navigate captions, annotations, groups, and split
+coverage in a local browser report or the terminal before and after export.
+Grouping joins exact-byte aliases and human-confirmed related pairs; it never
+selects a keeper or deletes a variant. [Export](docs/EXPORT.md) applies manual
+overrides, then source captions, then optional model drafts. It copies included
+images into whole-group splits and writes separate Kohya configurations.
+Pinned trainer import has generated-fixture CPU evidence; each export can receive
+its own `trainer-check` receipt. Draft regeneration stays independent of review overrides.
 
 - [PLAN.md](PLAN.md): review of the rough notes, pipeline design, acceptance criteria.
 - [TODO.md](TODO.md): implementation status and next work.
 - [docs/TAGGING.md](docs/TAGGING.md): model research, tagging commands, and qualification limits.
+- [docs/SIMILARITY.md](docs/SIMILARITY.md): pHash proposal policy, artifacts, and evidence.
+- [docs/REVIEW.md](docs/REVIEW.md): persistent decisions, caption overrides, and group snapshots.
+- [docs/EXPORT.md](docs/EXPORT.md): split/export commands, caption precedence, and verification.
 - [docs/TRAINIME.md](docs/TRAINIME.md): workflow design, preservation, recovery, and evidence.
 - [docs/INSTALLATION.md](docs/INSTALLATION.md): installer, error logs, doctor, and repair behavior.
 - [TAGGING-METHODS.md](TAGGING-METHODS.md): original notes and example snippets.
@@ -214,7 +249,7 @@ Pillow's own decoder limits still apply.
 
 Exact duplicates use complete SHA256 hashes. The lexicographically first relative
 path is the representative of identical bytes. Conflicting existing sidecars are
-flagged. Near-duplicate detection is not included yet. Same-stem images such as
+flagged. The separate similarity stage proposes near-duplicates for review. Same-stem images such as
 `picture.jpg` and `picture.png` are flagged because `picture.txt` is ambiguous.
 
 The manifest is deterministic for unchanged inputs, configuration, and runtime;
