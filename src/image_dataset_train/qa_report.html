@@ -57,6 +57,12 @@ th{color:#68736c;font-weight:500}td button{padding:3px 8px}
 <p id="context"></p><div class="metrics" id="metrics"></div><p id="saveNotice" role="status"></p>
 <nav id="workflowTabs" class="workflow-tabs" aria-label="Review workflow"><button id="imagesTab" aria-pressed="true">Images &amp; pilot</button><button id="contentTab" aria-pressed="false">Snapshot report</button><button id="pairsTab" aria-pressed="false" hidden>Related pairs</button><button id="publishTab" aria-pressed="false" hidden>Publish</button><button id="trainingTab" aria-pressed="false" hidden>Training import</button></nav><p id="trainingIndicator" class="muted" hidden></p></header>
 <main id="contentPane" class="workflow-pane" hidden>
+<section id="runAccounting"><h2>Count reconciliation and processing</h2>
+<p id="reconciliationStatus" role="status"></p>
+<div class="report-grid"><section><table><thead><tr><th>Population</th><th>Images / files</th></tr></thead><tbody id="reconciliationCounts"></tbody></table>
+<p id="sourceDisk" class="muted"></p><details><summary>Reconciliation checks</summary><table><thead><tr><th>Check</th><th>Expected</th><th>Actual</th><th>Result</th></tr></thead><tbody id="reconciliationChecks"></tbody></table></details></section>
+<section><p id="processingTotals"></p><p id="processingGaps" class="muted"></p><div class="table-scroll"><table><thead><tr><th>Stage / run</th><th>Seconds</th><th>Payload bytes</th><th>Files</th></tr></thead><tbody id="processingStages"></tbody></table></div>
+<p class="muted">Elapsed processing uses a monotonic clock for each referenced invocation, counted once. It excludes human review waits and final report/metadata writing. Publication-only measurements are marked. Recorded disk sizes are logical file bytes at publication, including copies in separate runs; they exclude each run's top-level run.json, summary.json and report.html, shared models/caches, filesystem allocation and peak temporary space.</p></section></div></section>
 <h2>Snapshot content and tagging evidence</h2>
 <label>Population<select id="contentScope"><option value="included">Included images</option><option value="snapshot">All snapshot images</option></select></label>
 <p id="contentCoverage" role="status"></p><p id="contentUnavailable" hidden>This older QA report has no content summary. Generate a new QA report from its saved groups or export.</p>
@@ -138,6 +144,13 @@ th{color:#68736c;font-weight:500}td button{padding:3px 8px}
 <div class="pair-images"><figure><figcaption id="leftPairName"></figcaption><div class="image-area"><img id="leftPairImage" alt="Left comparison image"></div></figure><figure><figcaption id="rightPairName"></figcaption><div class="image-area"><img id="rightPairImage" alt="Right comparison image"></div></figure></div>
 <p id="pairInfo" class="muted"></p><form id="pairForm"><fieldset id="pairFields" style="border:0;padding:0"><label>Relationship<select id="pairDecision"><option value="unreviewed">Unreviewed</option><option value="related">Related</option><option value="distinct">Distinct</option></select></label>
 <label>Reason for pair decision<input id="pairReason" type="text" required></label><div class="actions"><button class="primary" type="submit">Save pair decision</button><button id="reloadPair" type="button">Reload this pair</button></div></fieldset></form></div></article></div>
+<section class="coverage"><h2>Evaluate similarity thresholds</h2>
+<p>Compare all 65 pHash radii against saved related/distinct judgments, including manually reviewed pairs outside the proposal radius. Saves a new evaluation; source files and reviews stay unchanged.</p>
+<button id="evaluatePairs">Evaluate saved judgments</button><p id="pairEvaluationStatus" role="status"></p>
+<div id="pairEvaluation" hidden><p id="pairEvaluationCoverage"></p><p id="pairEvaluationCurrent"></p>
+<p class="muted">Metrics cover reviewed unique content pairs only. Exact-byte pairs are separate; aliases do not multiply a judgment. Review missed pairs and distinct examples as well as proposed matches. These sample metrics do not qualify the collection or choose a threshold automatically.</p>
+<details><summary>Compare thresholds</summary><div class="table-scroll"><table><thead><tr><th>Radius</th><th>True matches</th><th>False matches</th><th>Known misses</th><th>True distinct</th><th>Precision</th><th>Recall</th><th>F1</th></tr></thead><tbody id="pairThresholds"></tbody></table></div></details>
+<h2>False matches and known misses at the proposal radius</h2><p id="pairEvaluationErrorCount"></p><div id="pairEvaluationErrors" class="actions"></div><p id="pairEvaluationPath" class="status"></p></div></section>
 </main>
 <main id="publishPane" class="workflow-pane" hidden><h2>Publish reviewed snapshots</h2><p id="publicationReadiness" class="status" role="status"></p>
 <p>Each action captures current saved reviews. Groups may be incomplete; exports require completed pair/image decisions and usable captions. Existing snapshots remain unchanged.</p>

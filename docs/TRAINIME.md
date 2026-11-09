@@ -223,7 +223,8 @@ precedence and expiry, cancellation, literal/narrow-terminal output, read-only
 previews, source preservation, inference filtering, cache reuse, caption collisions,
 concurrent jobs, file changes before publication/removal, backup failures, and
 partial-run recovery. Test graphs validate the complete ONNX-to-caption workflow.
-Installed-command and real pinned-model evidence is recorded in `TODO.md`.
+Installed-command and real pinned-model evidence is recorded in
+[COMPLETED.md](COMPLETED.md).
 
 Remaining qualification: accuracy on a reviewed anime collection, physical CUDA
 execution, very large collections, trainer import, and human dataset acceptance.

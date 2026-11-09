@@ -69,3 +69,43 @@ function renderContent() {
 }
 $("contentScope").onchange = renderContent;
 renderContent();
+
+function renderAccounting() {
+  const counts = data.summary.reconciliation, processing = data.summary.processing;
+  $("runAccounting").hidden = !counts || !processing;
+  if (!counts || !processing) return;
+  const snapshot = counts.snapshot, intake = counts.intake, review = counts.review;
+  status("reconciliationStatus", `Count reconciliation: ${counts.status}. ` + counts.unavailable.join(" "), counts.status === "mismatch");
+  reportTable("reconciliationCounts", [
+    ["Inventory files", intake?.files ?? "Unavailable"],
+    ["Inventory images", intake?.images ?? "Unavailable"],
+    ["Eligible / ineligible at intake", intake ? `${intake.eligible_images} / ${intake.ineligible_images}` : "Unavailable"],
+    ["Grouped images", review.images],
+    ["Included / excluded / unreviewed", ["include", "exclude", "unreviewed"].map(d => review.decisions[d] || 0).join(" / ")],
+    ["Snapshot images / unique hashes", `${snapshot.images} / ${snapshot.unique_images}`],
+    ["Tagged / without tagged evidence", `${snapshot.tagged_images} / ${snapshot.without_tagged_evidence}`],
+    ["Tagged rows outside this snapshot", snapshot.tagged_outside_snapshot],
+    ["Available / missing captions", `${snapshot.captions} / ${snapshot.missing_captions}`],
+    ["Train / validation images", `${snapshot.split_images.train || 0} / ${snapshot.split_images.validation || 0}`],
+    ["Verified export pairs", snapshot.exported_pairs ?? "Group preview"]
+  ]);
+  text("sourceDisk", intake ? `Recorded source: ${intake.source_bytes.toLocaleString()} bytes across files with known sizes; ${intake.source_image_bytes.toLocaleString()} image bytes; ${intake.files_without_size} file sizes unavailable.` : "Source disk sizes were not captured in this snapshot.");
+  reportTable("reconciliationChecks", counts.checks.map(check => [
+    check.name, typeof check.expected === "string" ? "Recorded identities" : check.expected,
+    typeof check.actual === "string" ? (check.matches ? "Same identities" : "Different identities") : check.actual,
+    check.matches ? "Matches" : "MISMATCH"
+  ]), 4);
+  text("processingTotals", `${processing.recorded_processing_seconds.toFixed(3)} recorded processing seconds · ${processing.recorded_payload_bytes.toLocaleString()} payload bytes · ${processing.recorded_payload_files.toLocaleString()} files across referenced runs.`);
+  const gaps = [];
+  if (processing.missing_stages.length) gaps.push("Missing stage receipts: " + processing.missing_stages.join(", "));
+  if (processing.unmeasured_runs.length) gaps.push(`${processing.unmeasured_runs.length} runs have no measurements`);
+  if (processing.partial_scope_runs.length) gaps.push(`${processing.partial_scope_runs.length} runs measure publication only`);
+  text("processingGaps", gaps.length ? gaps.join(" · ") + ". Totals cover only recorded work." : "All referenced stages have processing measurements.");
+  reportTable("processingStages", processing.stages.map(stage => [
+    `${stage.stage} · ${stage.run_id}` + (stage.metrics && stage.metrics.timing_scope !== "stage_processing" ? " (publication only)" : ""),
+    stage.metrics?.elapsed_seconds.toFixed(3) ?? "Unavailable",
+    stage.metrics?.payload_bytes.toLocaleString() ?? "Unavailable",
+    stage.metrics?.payload_files ?? "Unavailable"
+  ]), 4);
+}
+renderAccounting();

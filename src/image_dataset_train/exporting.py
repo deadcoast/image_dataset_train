@@ -19,6 +19,7 @@ from image_dataset_train import __version__
 from image_dataset_train.annotations import annotation_fields
 from image_dataset_train.config import Config, ExportConfig
 from image_dataset_train.diagnostics import atomic_json, publish_directory
+from image_dataset_train.execution import RunClock, processing_history
 from image_dataset_train.inventory import file_sha256
 from image_dataset_train.splitting import assign_splits as assign_splits
 from image_dataset_train.splitting import balance_report, plan_splits
@@ -298,6 +299,7 @@ def export_dataset(
     progress: Callable[[str], None] | None = None,
 ) -> tuple[Path, dict]:
     """Copy approved occurrences into a new self-contained export, then verify before publish."""
+    clock = RunClock()
     groups_run = groups_run.resolve(strict=True)
     meta, groups, artifacts = _load_groups(groups_run)
     source = Path(meta["source"])
@@ -439,6 +441,8 @@ def export_dataset(
         "caption_analysis_version": 1,
         "review_revision": meta["review_revision"],
         "pipeline_version": __version__,
+        "started_at": clock.started_at,
+        "processing_history": processing_history(meta, draft_meta),
         "completed_at": datetime.now(UTC).isoformat(),
         "files": files,
         "source_revalidated": True,
@@ -449,6 +453,8 @@ def export_dataset(
     receipt = _verify_export(staging, metadata)
     atomic_json(staging / "verification.json", receipt)
     metadata["files"]["verification.json"] = file_sha256(staging / "verification.json")
+    metadata["metrics"] = clock.measure(staging)
+    metadata["completed_at"] = datetime.now(UTC).isoformat()
     atomic_json(staging / "run.json", metadata)
     final = root / run_id
     publish_directory(staging, final)

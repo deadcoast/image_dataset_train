@@ -145,6 +145,12 @@ class ReviewSession:
             expected_revision=payload["expected_revision"],
         )
 
+    def evaluate_pairs(self):
+        from image_dataset_train.similarity_evaluation import evaluate_similarity
+
+        directory, summary = evaluate_similarity(self.config, self.similarity)
+        return {"run": str(directory), **summary}
+
     def pair_image(self, identifier):
         row = self.pair_images[identifier]
         raw = _source_bytes(
@@ -351,6 +357,8 @@ def make_server(
                     raise ValueError("Expected an object")
                 if path == "api/pairs":
                     result = selected.save_pair(payload)
+                elif path == "api/similarity-evaluation":
+                    result = selected.evaluate_pairs()
                 elif path == "api/publication":
                     result = selected.publication.start(payload)
                 elif path == "api/assessment":

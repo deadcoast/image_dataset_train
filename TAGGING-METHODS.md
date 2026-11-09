@@ -3,8 +3,9 @@
 > Image Dataset Training Pipeline (v0.0.1)
 >
 > Original rough notes, preserved for reference. The reviewed design and work order
-> are now in [PLAN.md](PLAN.md), implementation status is in [TODO.md](TODO.md),
-> and runnable commands are in [README.md](README.md). Code blocks below are
+> are now in [PLAN.md](PLAN.md), unfinished work is in [TODO.md](TODO.md),
+> completed work is in [docs/COMPLETED.md](docs/COMPLETED.md), and runnable commands
+> are in [README.md](README.md). Code blocks below are
 > historical proposals, not the current implementation.
 
 ## WD14

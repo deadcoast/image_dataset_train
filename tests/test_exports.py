@@ -301,6 +301,72 @@ def test_content_report_uses_snapshot_members_and_frozen_provenance(reviewed):
     assert verify_export(output)["verified"]
 
 
+def test_qa_reconciles_counts_and_keeps_measured_processing_offline(reviewed):
+    from image_dataset_train.qa import read_qa
+    from image_dataset_train.reporting import reconcile_counts
+
+    config, groups_run, drafts = reviewed
+    report, summary = create_qa(config, groups_run, captions_run=drafts)
+    counts = summary["reconciliation"]
+    assert counts["status"] == "reconciled"
+    assert (counts["intake"]["files"], counts["intake"]["images"]) == (7, 5)
+    assert counts["review"]["decisions"] == {"include": 4, "exclude": 1}
+    assert counts["snapshot"]["without_tagged_evidence"] == 4
+    entries = read_qa(report)[1]["entries"]
+    groups = [json.loads(line) for line in (groups_run / "groups.jsonl").read_text().splitlines()]
+    members = [m for g in groups for m in g["members"]]
+    group_meta = json.loads((groups_run / "run.json").read_text())
+    group_summary = json.loads((groups_run / "summary.json").read_text())
+    changed = [{**entries[0], "sha256": "0" * 64}, *entries[1:]]
+    result = reconcile_counts(
+        groups, members, changed, {}, group_meta, group_summary, None, exported=False
+    )
+    assert result["status"] == "mismatch"
+    assert next(c for c in result["checks"] if c["name"] == "Snapshot → QA images")["matches"]
+    assert not next(c for c in result["checks"] if c["name"] == "Snapshot → QA identities")[
+        "matches"
+    ]
+    legacy = {key: value for key, value in group_meta.items() if key != "intake"}
+    assert (
+        reconcile_counts(groups, members, entries, {}, legacy, group_summary, None, exported=False)[
+            "status"
+        ]
+        == "partial"
+    )
+    output, _ = export_dataset(config, groups_run, captions_run=drafts)
+    export_meta = json.loads((output / "run.json").read_text())
+    expected_bytes = sum(
+        p.stat().st_size
+        for p in output.rglob("*")
+        if p.is_file()
+        and p.relative_to(output).as_posix() not in {"run.json", "summary.json", "report.html"}
+    )
+    assert export_meta["metrics"]["payload_bytes"] == expected_bytes
+    config.source.rename(config.source.with_name("offline-source"))
+    config.runs.rename(config.runs.with_name("offline-runs"))
+    _, frozen = create_qa(config, output)
+    assert frozen["reconciliation"]["status"] == "reconciled"
+    assert frozen["reconciliation"]["snapshot"]["exported_pairs"] == 4
+    assert frozen["reconciliation"]["intake"] == counts["intake"]
+    processing = frozen["processing"]
+    assert not processing["missing_stages"] and not processing["unmeasured_runs"]
+    assert len(processing["partial_scope_runs"]) == 1  # Fixture publishes existing scores.
+    stages = processing["stages"]
+    assert sorted(r["stage"] for r in stages) == [
+        "export",
+        "groups",
+        "inventory",
+        "qa",
+        "recaption",
+        "similarity",
+    ]
+    assert len({r["run_id"] for r in stages}) == len(stages)
+    assert processing["recorded_processing_seconds"] >= 0
+    assert processing["recorded_payload_bytes"] > expected_bytes
+    before = {r["run_id"]: r for r in summary["processing"]["stages"] if r["stage"] != "qa"}
+    assert all(r == before[r["run_id"]] for r in stages if r["run_id"] in before)
+
+
 def test_graphical_corrections_share_cli_state_and_export_path(reviewed):
     config, groups, drafts = reviewed
     qa, _ = create_qa(config, groups, captions_run=drafts, sample_size=1)
@@ -330,6 +396,8 @@ def test_graphical_corrections_share_cli_state_and_export_path(reviewed):
 
         try:
             assert b"Save corrections" in request("")[1]
+            code, raw = request("api/similarity-evaluation", {})
+            assert code == 200 and json.loads(raw)["both_classes_reviewed"]
             assert request(entry["preview"])[0] == 200
             assert request("image/" + entry["id"])[1] == (config.source / "b.png").read_bytes()
             route = "api/review/" + entry["id"]

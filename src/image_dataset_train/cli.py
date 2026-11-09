@@ -42,6 +42,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=8,
         help="maximum 64-bit pHash Hamming distance for a review proposal (default: 8)",
     )
+    evaluation = commands.add_parser(
+        "similarity-evaluate", help="measure pHash thresholds against saved pair judgments"
+    )
+    evaluation.add_argument("--run", type=Path, required=True, help="published similarity run")
+    evaluation.add_argument("--config", type=Path, default=Path("config.toml"))
+    evaluation.add_argument("--json", action="store_true")
     review = commands.add_parser(
         "review", help="review pairs, image decisions, and caption overrides"
     )
@@ -288,6 +294,22 @@ def main(argv: list[str] | None = None) -> int:
                 f"split state: {summary['split_state']}"
             )
             print("Findings: " + json.dumps(summary["findings"], ensure_ascii=False))
+            reconciliation, processing = summary["reconciliation"], summary["processing"]
+            print(f"Count reconciliation: {reconciliation['status']}")
+            for check in reconciliation["checks"]:
+                if not check["matches"]:
+                    print(f"  Mismatch: {check['name']}: {check['expected']} → {check['actual']}")
+            print(
+                f"Recorded processing: {processing['recorded_processing_seconds']:.3f}s; "
+                f"payload: {processing['recorded_payload_bytes']} bytes "
+                f"in {processing['recorded_payload_files']} files across referenced runs"
+            )
+            print(
+                f"Measurement coverage: {len(processing['missing_stages'])} missing stages; "
+                f"{len(processing['unmeasured_runs'])} unmeasured runs; "
+                f"{len(processing['partial_scope_runs'])} publication-only runs. "
+                "Payload excludes final report metadata and shared models/caches."
+            )
             content = summary["content"]["scopes"]["included"]
             print(
                 f"Included content: {content['images']} images; "
@@ -399,6 +421,32 @@ def main(argv: list[str] | None = None) -> int:
                 f"subsets reviewed: {annotations['subset_reviewed']}/{annotations['images']}"
             )
             print("Next: dataset trainer-check --run <this-export> for pinned CPU import.")
+            return 0
+
+        if args.command == "similarity-evaluate":
+            from image_dataset_train.similarity_evaluation import evaluate_similarity
+
+            directory, summary = evaluate_similarity(config, args.run)
+            if args.json:
+                print(json.dumps({"run": str(directory), **summary}, ensure_ascii=False, indent=2))
+            else:
+                current = summary["current"]
+                print(f"Similarity evaluation: {directory}")
+                print(
+                    f"Review revision: {summary['review_revision']}; "
+                    f"related pairs: {summary['related_pairs']}; "
+                    f"distinct: {summary['distinct_pairs']}"
+                )
+                print(
+                    f"Radius {current['max_distance']}: {current['false_positive']} false matches; "
+                    f"{current['false_negative']} known misses"
+                )
+                print(
+                    "Precision/recall: "
+                    + json.dumps({key: current[key] for key in ("precision", "recall")})
+                )
+                print(summary["scope"])
+                print("All 65 radii and evidence coverage are saved in summary.json.")
             return 0
 
         if args.command in {"review", "groups"}:

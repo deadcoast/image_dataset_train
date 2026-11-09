@@ -127,11 +127,12 @@ Group-aware training exports and independent snapshot verification are implement
 | `trainime remove <directory>` | Remove paired captions after backup. | Backs up and removes source `.txt` sidecars; images and unrelated files remain. |
 | `dataset scan` | Technical intake inventory. | Read-only; publishes an inventory under the configured `paths.runs`. |
 | `dataset similarity --inventory <inventory-run>` | Find visually similar pair candidates. | Read-only; publishes `images.jsonl` and unreviewed `pairs.jsonl` under `paths.runs`. Pairs require human review and do not remove or group images. |
+| `dataset similarity-evaluate --run <similarity-run>` | Measure thresholds against saved related/distinct judgments. | Writes an evaluation and replayable pair evidence under `paths.runs`; reads saved hashes without changing sources, reviews, or the proposal radius. |
 | `dataset review --run <similarity-run>` | List pairs; use `--images` to list images. Save decisions with `--pair`, `--link`, or `--image`. | Reads by default. Edits persist under `paths.reviews`, bound to source paths and hashes; source images and captions remain unchanged. |
 | `dataset groups --run <similarity-run>` | Publish the current related-image groups and review state. | Writes a new snapshot under `paths.runs`, retaining every eligible occurrence and its decisions. Does not split, copy, or export images. |
 | `dataset export --groups <groups-run>` | Split whole groups and select reviewed captions. | Copies included images and captions to a new verified snapshot under `paths.exports`; preserves source files. Optional `--captions <tagging-run>` supplies missing drafts. |
 | `dataset verify-export --run <export-run>` | Recheck a published export. | Read-only; verifies pairs, hashes, membership, and split consistency without the source collection. |
-| `dataset qa --run <groups-or-export-run>` | Inspect captions, annotations, and split coverage. | Writes a new local browser report, image previews, and reproducible pilot selection under `paths.runs`; source files and review state stay unchanged. |
+| `dataset qa --run <groups-or-export-run>` | Inspect captions, content/rating distributions, top tags, provenance, and split coverage. | Writes a new local browser report, image previews, and reproducible pilot selection under `paths.runs`; `--json` prints the snapshot summary; source files and review state stay unchanged. |
 | `dataset qa-list --run <qa-run>` | Filter and page through QA findings in the terminal. | Reads the saved report and prints commands for the matching review records. |
 | `dataset review-ui --run <qa-run>` | Review images and related pairs, assess the pilot, and publish from a local browser. | Saves decisions and judgments under `paths.reviews`; publishes new groups/QA under `paths.runs` and verified exports under `paths.exports`; preserves source files. |
 | `dataset assessment --run <qa-run>` | Inspect recorded pilot results. | Reads progress, critical-label errors, reviewer notes, and the explicit pilot conclusion. |
@@ -184,7 +185,8 @@ Pinned trainer import has generated-fixture CPU evidence; each export can receiv
 its own `trainer-check` receipt. Draft regeneration stays independent of review overrides.
 
 - [PLAN.md](PLAN.md): review of the rough notes, pipeline design, acceptance criteria.
-- [TODO.md](TODO.md): implementation status and next work.
+- [TODO.md](TODO.md): unfinished requirements and acceptance work.
+- [docs/COMPLETED.md](docs/COMPLETED.md): completed steps and dated verification evidence.
 - [docs/TAGGING.md](docs/TAGGING.md): model research, tagging commands, and qualification limits.
 - [docs/SIMILARITY.md](docs/SIMILARITY.md): pHash proposal policy, artifacts, and evidence.
 - [docs/REVIEW.md](docs/REVIEW.md): persistent decisions, caption overrides, and group snapshots.

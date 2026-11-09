@@ -17,6 +17,7 @@ from PIL import Image, ImageOps
 from image_dataset_train.annotations import annotation_fields, annotation_name, annotation_summary
 from image_dataset_train.config import Config
 from image_dataset_train.diagnostics import atomic_json, publish_directory
+from image_dataset_train.execution import RunClock, processing_history, processing_report
 from image_dataset_train.exporting import (
     _caption,
     _checked,
@@ -31,7 +32,7 @@ from image_dataset_train.exporting import (
     verify_export,
 )
 from image_dataset_train.inventory import file_sha256
-from image_dataset_train.reporting import content_report
+from image_dataset_train.reporting import content_report, reconcile_counts
 from image_dataset_train.splitting import balance_report, plan_splits
 
 
@@ -147,6 +148,7 @@ def create_qa(
     seed: int = 20261011,
     config_path: Path = Path("config.toml"),
 ) -> tuple[Path, dict]:
+    clock = RunClock()
     run = run.resolve(strict=True)
     metadata = _published(run, {"groups", "export"})
     exported = metadata["stage"] == "export"
@@ -156,6 +158,7 @@ def create_qa(
             raise ValueError("An export already freezes captions; omit --captions.")
         verify_export(run)
         members = _rows((run / "manifest.jsonl").read_bytes())
+        groups = _rows((run / "provenance/groups.jsonl").read_bytes())
         group_meta = json.loads((run / "provenance/groups-run.json").read_text(encoding="utf-8"))
         split_plan = json.loads((run / "splits.json").read_text(encoding="utf-8"))
         snapshot_summary = json.loads((run / "provenance/summary.json").read_text(encoding="utf-8"))
@@ -347,6 +350,16 @@ def create_qa(
         "seed": seed,
         "pilot_ids": pilot,
         "human_accepted": False,
+        "reconciliation": reconcile_counts(
+            groups,
+            members,
+            entries,
+            drafts,
+            group_meta,
+            snapshot_summary,
+            draft_meta,
+            exported=exported,
+        ),
         "content": content_report(
             members,
             drafts,
@@ -359,17 +372,26 @@ def create_qa(
             ),
         ),
     }
-    atomic_json(staging / "summary.json", summary)
     atomic_json(staging / "coverage.json", balance)
     (staging / "entries.jsonl").write_text(
         "".join(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n" for entry in entries),
         encoding="utf-8",
         newline="\n",
     )
+    run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ") + "-qa-" + uuid4().hex[:8]
+    metrics = clock.measure(staging)
+    history = processing_history(group_meta, draft_meta, metadata)
+    current = {"run_id": run_id, "stage": "qa", "status": "completed", "metrics": metrics}
+    expected_stages = {"inventory", "similarity", "groups", "qa"}
+    if exported:
+        expected_stages.add("export")
+    if draft_meta:
+        expected_stages.add(draft_meta["stage"])
+    summary["processing"] = processing_report([*history, current], expected_stages)
+    atomic_json(staging / "summary.json", summary)
     (staging / "report.html").write_text(
         render_qa({"summary": summary, "entries": entries, "coverage": balance}), encoding="utf-8"
     )
-    run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ") + "-qa-" + uuid4().hex[:8]
     atomic_json(
         staging / "run.json",
         {
@@ -386,6 +408,9 @@ def create_qa(
             "publication_caption_run": metadata.get("caption_run") if exported else None,
             "caption_manifest_sha256": draft_meta["manifest_sha256"] if draft_meta else None,
             "created_at": datetime.now(UTC).isoformat(),
+            "started_at": clock.started_at,
+            "metrics": metrics,
+            "processing_history": history,
             "files": {
                 p.relative_to(staging).as_posix(): file_sha256(p)
                 for p in staging.rglob("*")

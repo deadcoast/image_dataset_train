@@ -21,6 +21,7 @@ from PIL import __version__ as pillow_version
 from image_dataset_train import __version__
 from image_dataset_train.config import Config
 from image_dataset_train.diagnostics import publish_directory
+from image_dataset_train.execution import RunClock, processing_history
 from image_dataset_train.inventory import file_sha256
 from image_dataset_train.inventory_data import read_inventory
 
@@ -170,6 +171,7 @@ def propose_similar(
     progress: Callable[[str], None] | None = None,
 ) -> tuple[Path, dict]:
     """Publish review-only perceptual-hash candidates without changing sources."""
+    clock = RunClock()
     if type(max_distance) is not int or not 0 <= max_distance <= 64:
         raise ValueError("max_distance must be an integer between 0 and 64")
     started = datetime.now(UTC)
@@ -295,6 +297,9 @@ def propose_similar(
     metadata["images_sha256"] = file_sha256(staging / "images.jsonl")
     metadata["pairs_sha256"] = file_sha256(staging / "pairs.jsonl")
     metadata["summary_sha256"] = file_sha256(staging / "summary.json")
+    metadata["processing_history"] = processing_history(inventory_meta)
+    metadata["metrics"] = clock.measure(staging)
+    metadata["completed_at"] = datetime.now(UTC).isoformat()
     (staging / "run.json").write_text(_json(metadata), encoding="utf-8", newline="\n")
     final = runs / run_id
     publish_directory(staging, final)

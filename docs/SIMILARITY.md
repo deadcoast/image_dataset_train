@@ -25,6 +25,35 @@ A smaller radius proposes fewer pairs. Zero means identical perceptual hashes;
 it does not establish byte equality or visual equivalence. The radius is
 provisional and has not been calibrated against reviewed anime artwork.
 
+## Evaluate reviewed pairs
+
+```powershell
+dataset similarity-evaluate --run 'data/runs/<similarity-id>' --json
+```
+
+The **Related pairs** view offers the same **Evaluate saved judgments** action.
+Both publish a new run under `paths.runs`, containing `summary.json`, `pairs.jsonl`
+and run metadata with artifact hashes. Source images and review decisions are unchanged. Saved
+hashes are used directly; original images can be offline, while the referenced
+inventory, similarity artifacts and review store must remain available.
+
+The report compares radii 0–64, inclusive, with true/false positives and negatives,
+precision, recall and F1. It shows false matches and known misses at the original
+proposal radius; graphical examples reopen the pair for correction. The saved
+evaluation retains its review revision when judgments later change.
+
+Only explicit related/distinct judgments enter the measurements. Manual comparisons
+outside the proposal radius provide known misses; unjudged pairs are never counted
+as negatives. Exact-byte pairs are reported separately, and alias judgments collapse
+to one content pair. Stale decisions, unavailable hashes and conflicting judgments
+are counted outside the scored sample. Undefined ratios are `null`, not perfect scores.
+
+Review both related and distinct examples, including independently selected pairs
+outside the proposal queue. A proposal-only sample cannot establish missed-match
+behavior for the collection. No threshold is selected automatically and no collection
+qualification is inferred. `pairs.jsonl` preserves judged hashes, distances, paths,
+decisions and reasons so the threshold results can be reproduced.
+
 ## Input and preservation
 
 The inventory manifest checksum, schema, source paths, and eligible-image SHA256
@@ -92,9 +121,10 @@ and negative pair proposals; an exhaustive Hamming oracle checks indexed lookup.
 Source changes, malformed inputs, preservation, streamed output, interruption,
 publication failure, current limits, and CLI behavior are covered. An isolated
 wheel also completed scan/similarity without tagging extras. Receipts and the
-scope of each check are recorded in [TODO.md](../TODO.md).
+scope of each check are recorded in [COMPLETED.md](COMPLETED.md).
 
 Durable pair decisions and group publication are implemented as a separate review
-stage; their evidence is recorded in [TODO.md](../TODO.md). No reviewed anime pilot,
-threshold precision/recall, large-collection benchmark, or downstream training
-acceptance is established.
+stage. The 2026-11-09 threshold evaluator has generated-fixture evidence for metrics,
+manual misses, alias handling, replay, and CLI/graphical parity, recorded in
+[COMPLETED.md](COMPLETED.md). No reviewed anime pilot, collection-specific threshold
+precision/recall, large-collection benchmark, or downstream training acceptance is established.

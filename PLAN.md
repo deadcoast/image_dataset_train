@@ -124,6 +124,12 @@ The initial `dataset similarity` stage uses a versioned 64-bit DCT pHash, valida
 source hashes against the inventory, and publishes pair proposals for human review.
 Its default Hamming radius is 8 and can be changed per invocation. The threshold is
 not calibrated for this collection; proposals never mutate or exclude source files.
+`dataset similarity-evaluate` now measures saved related/distinct judgments against
+all 65 radii, including manually reviewed pairs outside the proposal radius. It
+retains the judged hashes and review revision, collapses exact-byte aliases, and
+reports false matches, known misses and sample precision/recall. The pair reviewer
+shares this evaluation and links errors back to image comparison. Representative
+pilot calibration remains required; unreviewed pairs are not presumed distinct.
 Evaluate a local embedding model only if pHash misses important variants on the
 pilot. An embedding threshold has its own metric and is not interchangeable with
 a pHash threshold.
@@ -250,6 +256,13 @@ provenance for both all members and explicitly included members. Export reports 
 frozen evidence; unavailable observations remain explicit. Measured collection
 accuracy and tokenizer checks remain future work.
 
+Count reconciliation now compares intake eligibility, grouped/reviewed membership,
+snapshot identities, tagging coverage, split counts and export pairs. Stage receipts
+record monotonic processing time and logical payload bytes, and travel with exports
+for offline QA. Inventory timing includes scanning; reuse/publication-only paths are
+identified separately. These facilities enable the M6 batch measurements; they do
+not establish representative-collection acceptance by themselves.
+
 Report one run/snapshot: decision counts, dimensions/aspect ratios, exact/near
 duplicate groups, content/rating distributions, top tags, label conflicts,
 caption lengths, overrides, splits, and model/provider provenance. Later add
@@ -299,7 +312,8 @@ each stage rather than accepting configuration that silently does nothing.
 M1 and the tagging execution contract are tested with generated fixtures; pinned
 SwinV2 CPU inference and reference preprocessing also have local smoke evidence.
 The M2 pHash proposal stage has generated-fixture regression coverage and an
-isolated wheel execution check, recorded in TODO.md. Durable decisions, manual
+isolated wheel execution check, recorded in [the completion log](docs/COMPLETED.md).
+Durable decisions, manual
 overrides, and group snapshots have generated-fixture integration coverage.
 Representative anime pair evaluation remains pending. M2-M6 require a
 representative local collection before quality/performance claims. The code should

@@ -2,6 +2,28 @@
 
 ## Snapshot content report
 
+The **Count reconciliation and processing** section compares intake file/image
+counts, eligible group membership, review decisions, tagging coverage, snapshot/QA
+identities, split allocation, and verified export pairs. Equal counts with different
+image identities are a mismatch. Missing legacy intake evidence produces a partial
+result. Untagged images can still have valid source/manual captions; coverage gaps
+remain distinct from count mismatches. Reconciliation does not approve captions.
+
+New inventory, similarity, tagging/recaption, group, export and QA runs record
+monotonic elapsed processing time and logical payload sizes. The report lists each
+referenced invocation once, including prior tagging/recaption runs, and identifies
+missing measurements and publication-only timings. Times exclude human review waits
+and final presentation/metadata writing. Disk totals count separate artifact copies
+but exclude top-level `run.json`, `summary.json` and `report.html` in each run, shared
+model weights/caches, filesystem allocation and peak temporary space. Source bytes
+come from the captured inventory, with unavailable file sizes counted explicitly.
+These are recorded publication measurements, not a scan of current disk usage.
+
+Receipts and intake counts are retained in new exports, so reporting does not require
+upstream runs or source files to remain online. Old exports remain readable with
+explicit evidence gaps. `summary.json` and CLI `qa --json` expose the same
+`reconciliation` and `processing` objects displayed in the browser.
+
 **Snapshot report** is available in both the saved `report.html` and `review-ui`.
 Choose **Included images** or **All snapshot images** to inspect reviewed labels and
 subsets, model composition, proposed subsets, rating counts, and the top 100 tags.

@@ -26,6 +26,7 @@ from image_dataset_train.captions import (
     rules_identity,
 )
 from image_dataset_train.config import CaptionConfig, Config, ValidationConfig
+from image_dataset_train.execution import RunClock, processing_history
 from image_dataset_train.inventory import file_sha256
 from image_dataset_train.inventory_data import read_inventory
 from image_dataset_train.model_bundle import (
@@ -105,7 +106,11 @@ def _publish(
     summary: dict,
     rules: CaptionConfig,
     default_threshold: float,
+    *,
+    clock: RunClock | None = None,
 ) -> Path:
+    scope = "stage_processing" if clock is not None else "caption_publication_only"
+    clock = clock or RunClock()
     root.mkdir(parents=True, exist_ok=True)
     stage = metadata["stage"]
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ") + f"-{stage}-" + uuid4().hex[:8]
@@ -178,9 +183,26 @@ def _publish(
             "manifest_sha256": file_sha256(pending / "manifest.jsonl"),
             "labels_sha256": file_sha256(pending / "labels.json"),
             "score_index_sha256": file_sha256(pending / "score_index.json"),
+            "counts": {
+                "image_rows": len(rows),
+                "decisions": summary["decisions"],
+                "unique_scored_images": len(vectors),
+                **{
+                    key: summary[key]
+                    for key in (
+                        "inferred_images",
+                        "cached_images",
+                        "duplicate_score_reuse",
+                        "reused_score_vectors",
+                    )
+                    if key in summary
+                },
+            },
         }
     )
     atomic_json(pending / "summary.json", summary)
+    metadata["metrics"] = clock.measure(pending, scope=scope)
+    metadata["completed_at"] = datetime.now(UTC).isoformat()
     atomic_json(pending / "run.json", metadata)
     final = root / run_id
     from image_dataset_train.diagnostics import publish_directory
@@ -197,6 +219,7 @@ def tag_inventory(
     only_sources: set[str] | None = None,
     repair_cache: bool = False,
 ) -> tuple[Path, dict]:
+    clock = RunClock()
     started = datetime.now(UTC).isoformat()
     inventory_meta, records, inventory_hash = _read_inventory(inventory)
     source = Path(inventory_meta["source"]).resolve(strict=True)
@@ -286,16 +309,26 @@ def tag_inventory(
         "cache_namespace": tagger.cache_namespace,
         "batch_size": effective_batch,
         "validation": asdict(config.validation),
+        "processing_history": processing_history(inventory_meta),
     }
     default = MODELS[config.tagging.model].suggested_general_threshold
     directory = _publish(
-        config.runs, rows, vectors, bundle.labels, metadata, summary, config.captions, default
+        config.runs,
+        rows,
+        vectors,
+        bundle.labels,
+        metadata,
+        summary,
+        config.captions,
+        default,
+        clock=clock,
     )
     return directory, summary
 
 
 def recaption(config: Config, previous: Path) -> tuple[Path, dict]:
     """Rebuild caption drafts from a self-contained scored run, without loading an ONNX model."""
+    clock = RunClock()
     from image_dataset_train.wd_tagger import validate_scores
 
     metadata = json.loads((previous / "run.json").read_text(encoding="utf-8"))
@@ -346,7 +379,8 @@ def recaption(config: Config, previous: Path) -> tuple[Path, dict]:
     metadata = {
         **metadata,
         "stage": "recaption",
-        "started_at": datetime.now(UTC).isoformat(),
+        "started_at": clock.started_at,
+        "processing_history": processing_history(metadata),
         "parent_run": str(previous.resolve()),
         "source_revalidated": False,
     }
@@ -360,5 +394,6 @@ def recaption(config: Config, previous: Path) -> tuple[Path, dict]:
         summary,
         config.captions,
         metadata["default_general_threshold"],
+        clock=clock,
     )
     return directory, summary

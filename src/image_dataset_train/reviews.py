@@ -24,6 +24,7 @@ from image_dataset_train.annotations import (
 )
 from image_dataset_train.config import Config
 from image_dataset_train.diagnostics import atomic_json, publish_directory
+from image_dataset_train.execution import RunClock, intake_counts, processing_history
 from image_dataset_train.inventory import file_sha256
 from image_dataset_train.inventory_data import read_inventory
 
@@ -57,6 +58,7 @@ class ReviewContext:
     rows: dict[str, dict]
     metadata: dict
     similarity_errors: int
+    inventory_metadata: dict
 
     def pairs(self):
         with (self.run / "pairs.jsonl").open(encoding="utf-8") as stream:
@@ -82,7 +84,7 @@ class ReviewContext:
                 yield pair
 
 
-def load_context(run: Path) -> ReviewContext:
+def load_context(run: Path, *, require_source: bool = True) -> ReviewContext:
     run = run.resolve(strict=True)
     metadata = json.loads((run / "run.json").read_text(encoding="utf-8"))
     if (
@@ -105,9 +107,9 @@ def load_context(run: Path) -> ReviewContext:
         raise ValueError("similarity run is missing its inventory reference")
     inventory = Path(metadata["inventory_run"])
     inventory_meta, rows, digest = read_inventory(inventory)
-    source = Path(inventory_meta["source"]).resolve(strict=True)
+    source = Path(inventory_meta["source"]).resolve(strict=require_source)
     if (
-        not source.is_dir()
+        (require_source and not source.is_dir())
         or digest != metadata.get("inventory_manifest_sha256")
         or str(source) != metadata.get("source")
         or not isinstance(metadata.get("hash_version"), str)
@@ -128,6 +130,7 @@ def load_context(run: Path) -> ReviewContext:
         {r["source_path"]: r for r in rows},
         metadata,
         summary["errors"],
+        inventory_meta,
     )
 
 
@@ -643,6 +646,7 @@ def publish_groups(
     *,
     expected_revision: int | None = None,
 ) -> tuple[Path, dict]:
+    clock = RunClock()
     context = load_context(run)
     _separate(context.source, config.runs)
     store = ReviewStore(config.reviews, context.source)
@@ -727,6 +731,10 @@ def publish_groups(
             "inventory_manifest_sha256": context.inventory_hash,
             "review_revision": state["revision"],
             "pipeline_version": __version__,
+            "started_at": clock.started_at,
+            "intake": intake_counts(context.rows.values()),
+            "processing_history": processing_history(context.inventory_metadata, context.metadata),
+            "metrics": clock.measure(staging),
             "completed_at": datetime.now(UTC).isoformat(),
             "files": {
                 name: file_sha256(staging / name)

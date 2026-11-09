@@ -4,7 +4,7 @@ Research checked 2026-10-11. The tagging pipeline was first qualified with proje
 version 0.2.0; the package version is now 0.5.1. The evidence in this document is
 milestone-specific: it establishes local execution and preprocessing parity, not
 current anime-collection accuracy, physical CUDA behavior, or training readiness.
-See [TODO.md](../TODO.md) for the latest recorded package-level checks and their
+See [COMPLETED.md](COMPLETED.md) for the latest recorded package-level checks and their
 dates. Research references below have not been rechecked in this status update.
 
 ## Research decisions

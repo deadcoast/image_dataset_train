@@ -2,6 +2,7 @@
 if (data.session) {
   let pairResult = null, currentPair = null, pairRevision = null, pairOffset = 0;
   let pairRequest = 0, pairLoading = false, publicationRevision = null, publicationTimer = null;
+  let evaluatingPairs = false, evaluationRevision = null;
   ["pairs", "publish", "training"].forEach(name => $(name + "Tab").hidden = false);
   data.entries.forEach(entry => {
     const option = document.createElement("option");
@@ -19,8 +20,9 @@ if (data.session) {
   ["images", "pairs", "publish", "training"].forEach(name => $(name + "Tab").onclick = () => switchPane(name));
 
   function pairLocks() {
-    const locked = workflowDirty || pairLoading;
-    ["pairFilter", "refreshPairs", "comparePair", "manualLeft", "manualRight"].forEach(id => $(id).disabled = locked);
+    const locked = workflowDirty || pairLoading || evaluatingPairs;
+    ["pairFilter", "refreshPairs", "comparePair", "manualLeft", "manualRight", "evaluatePairs"].forEach(id => $(id).disabled = locked);
+    document.querySelectorAll("#pairEvaluationErrors button").forEach(button => button.disabled = locked);
     $("pairPrev").disabled = locked || pairOffset === 0;
     $("pairNext").disabled = locked || pairResult?.pair_next_offset == null;
     document.querySelectorAll("#pairQueue button").forEach(button => button.disabled = locked);
@@ -55,6 +57,9 @@ if (data.session) {
         return loadPairs(preferred);
       }
       pairResult = result;
+      if (evaluationRevision !== null && result.revision !== evaluationRevision) {
+        text("pairEvaluationStatus", `Saved evaluation covers revision ${evaluationRevision}; current reviews are revision ${result.revision}. Evaluate again to include changes.`);
+      }
       text("pairProgress", `${result.pair_counts.unreviewed || 0} unresolved · ${result.groups} current groups · ${result.pair_total} matching pairs`);
       $("pairQueue").replaceChildren();
       result.pairs.forEach(pair => {
@@ -102,6 +107,36 @@ if (data.session) {
       status("pairMessage", "Pair decision saved · revision " + saved.revision);
     } catch (error) { status("pairMessage", error.message, true); }
     finally { $("pairFields").disabled = false; pairLocks(); }
+  };
+
+  $("evaluatePairs").onclick = async () => {
+    evaluatingPairs = true; pairLocks();
+    status("pairEvaluationStatus", "Evaluating saved judgments…");
+    try {
+      const result = await api("api/similarity-evaluation", {}), counts = result.counts, point = result.current;
+      evaluationRevision = result.review_revision;
+      $("pairEvaluation").hidden = false;
+      status("pairEvaluationStatus", `Saved evaluation · review revision ${result.review_revision}`);
+      text("pairEvaluationCoverage", `${result.related_pairs} related / ${result.distinct_pairs} distinct evaluated content pairs · ${counts.alias_judgments_collapsed || 0} alias judgments combined · ${counts.exact_byte_judgments || 0} exact-byte judgments separate · ${counts.hash_unavailable || 0} pairs without hashes · ${counts.conflicting_judgments || 0} conflicting pairs · ${counts.stale_decisions || 0} stale decisions. ` +
+        (result.both_classes_reviewed ? "Both classes are represented." : "Both related and distinct examples are needed for a useful threshold comparison."));
+      text("pairEvaluationCurrent", `Proposal radius ${point.max_distance}: ${point.false_positive} false matches · ${point.false_negative} known misses. ${counts.unjudged_indexed_pairs} indexed content pairs have no usable judgment.`);
+      const percent = value => value === null ? "—" : (100 * value).toFixed(1) + "%";
+      reportTable("pairThresholds", result.thresholds.map(row => [
+        row.max_distance + (row.max_distance === point.max_distance ? " (proposal radius)" : ""),
+        row.true_positive, row.false_positive, row.false_negative, row.true_negative,
+        percent(row.precision), percent(row.recall), percent(row.f1)
+      ]), 8);
+      text("pairEvaluationErrorCount", `Showing ${result.error_examples.length} of ${result.error_examples_total} evaluated errors. All evaluated pairs are saved in pairs.jsonl.`);
+      $("pairEvaluationErrors").replaceChildren();
+      result.error_examples.forEach(pair => {
+        const example = pair.judgments[0], button = document.createElement("button");
+        button.textContent = `${pair.finding}: ${example.left_source_path} ↔ ${example.right_source_path} (distance ${pair.distance})`;
+        button.onclick = async () => { await compare(example.left_source_path, example.right_source_path); $("pairMessage").scrollIntoView({block:"start"}); };
+        $("pairEvaluationErrors").append(button);
+      });
+      text("pairEvaluationPath", "Saved evaluation: " + result.run);
+    } catch (error) { status("pairEvaluationStatus", error.message, true); }
+    finally { evaluatingPairs = false; pairLocks(); }
   };
 
   const defaults = data.publication;

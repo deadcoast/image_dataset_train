@@ -16,6 +16,7 @@ from image_dataset_train.reviews import (
 )
 from image_dataset_train.runs import run_scan
 from image_dataset_train.similarity import propose_similar
+from image_dataset_train.similarity_evaluation import evaluate_similarity, threshold_sweep
 
 
 @pytest.fixture
@@ -36,6 +37,79 @@ def prepared(tmp_path):
         for p in review_status(config, run)["pairs"]
     }
     return config, run, pairs
+
+
+def test_similarity_evaluation_counts_manual_misses_without_alias_inflation(
+    prepared, tmp_path, capsys
+):
+    config, run, _ = prepared
+    for paths, decision in [
+        (["a.png", "b.png"], "related"),
+        (["d.png", "b.png"], "related"),
+        (["a.png", "c.png"], "distinct"),
+        (["a.png", "d.png"], "related"),
+    ]:
+        review_link(config, run, paths, decision, "fixture judgment")
+    wide, summary = evaluate_similarity(config, run)
+    assert summary["current"]["false_positive"] == 1
+    assert summary["current"]["precision"] == 0.5
+    assert summary["counts"]["evaluated"] == 2
+    assert summary["counts"]["alias_judgments_collapsed"] == 1
+    assert summary["counts"]["exact_byte_judgments"] == 1
+    assert summary["counts"]["unjudged_indexed_pairs"] == 1
+    inventory = Path(json.loads((run / "run.json").read_text())["inventory_run"])
+    strict, _ = propose_similar(config, inventory, max_distance=0)
+    review_files = {p: p.read_bytes() for p in config.reviews.rglob("*") if p.is_file()}
+    source_files = {p.name: p.read_bytes() for p in config.source.iterdir()}
+    config.source.rename(config.source.with_name("offline-source"))
+    report, result = evaluate_similarity(config, strict)
+    assert result["both_classes_reviewed"] and not result["collection_qualified"]
+    assert result["current"]["false_negative"] == 1
+    assert result["error_examples"][0]["finding"] == "known_miss"
+    pairs = [json.loads(line) for line in (report / "pairs.jsonl").read_text().splitlines()]
+    assert threshold_sweep(pairs) == result["thresholds"]  # Replay from saved evidence alone.
+    assert result["thresholds"] == summary["thresholds"] and len(result["thresholds"]) == 65
+    distance = next(pair["distance"] for pair in pairs if pair["decision"] == "related")
+    assert result["thresholds"][distance - 1]["false_negative"] == 1
+    assert result["thresholds"][distance]["true_positive"] == 1
+    assert all(p.read_bytes() == raw for p, raw in review_files.items())
+    assert source_files == {
+        p.name: p.read_bytes() for p in config.source.with_name("offline-source").iterdir()
+    }
+    settings = tmp_path / "evaluate.toml"
+    settings.write_text(
+        f'schema_version=1\n[paths]\nruns="{config.runs.as_posix()}"\nreviews="{config.reviews.as_posix()}"\n'
+    )
+    assert (
+        main(["similarity-evaluate", "--run", str(strict), "--config", str(settings), "--json"])
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out)["current"] == result["current"]
+    assert (wide / "summary.json").is_file()
+
+
+def test_similarity_evaluation_reports_missing_hashes_stale_and_unreviewed_decisions(prepared):
+    config, run, _ = prepared
+    review_link(config, run, ["a.png", "b.png"], "related", "fixture judgment")
+    review_link(config, run, ["a.png", "c.png"], "distinct", "fixture judgment")
+    inventory = Path(json.loads((run / "run.json").read_text())["inventory_run"])
+    (config.source / "b.png").write_bytes(b"changed after inventory")
+    failed_hashes, _ = propose_similar(config, inventory)
+    _, summary = evaluate_similarity(config, failed_hashes)
+    assert summary["counts"]["hash_unavailable"] == 1
+    assert summary["related_pairs"] == 0 and summary["distinct_pairs"] == 1
+    assert not summary["both_classes_reviewed"]
+    assert all(point["recall"] is None for point in summary["thresholds"])
+    changed_inventory, _ = run_scan(config)
+    changed, _ = propose_similar(config, changed_inventory)
+    review_link(config, changed, ["a.png", "c.png"], "unreviewed", "reset judgment")
+    _, empty = evaluate_similarity(config, changed)
+    assert empty["counts"]["stale_decisions"] == 1
+    assert empty["counts"]["pending_decisions"] == 1
+    assert empty["counts"].get("evaluated", 0) == 0
+    assert all(
+        point["precision"] is None and point["recall"] is None for point in empty["thresholds"]
+    )
 
 
 def test_reviews_persist_form_groups_detect_conflicts_and_keep_captions(prepared):
