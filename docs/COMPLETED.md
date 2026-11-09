@@ -643,7 +643,6 @@ record source implementation; the active acceptance work is in
    frozen model/provider provenance, count reconciliation and processing time/payload
    receipts now follow PLAN section 6. Full-collection execution and acceptance remain open.
 
-
 ## M3 and initial caption rules: implemented
 
 - [x] Research WD SwinV2/ViT-Large/EVA02-Large and Camie v2 using primary sources.
