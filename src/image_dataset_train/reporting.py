@@ -112,7 +112,7 @@ def content_report(
     provenance = None
     if metadata is not None:
         provenance = {
-            key: metadata.get(key)
+            key: metadata[key]
             for key in (
                 "run_id",
                 "stage",
@@ -132,6 +132,7 @@ def content_report(
                 "caption_rules",
                 "default_general_threshold",
             )
+            if key in metadata
         }
     return {
         "schema_version": 1,

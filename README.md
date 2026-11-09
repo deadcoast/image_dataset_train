@@ -117,7 +117,7 @@ related-image group snapshots, local WD tagging, score caching, caption regenera
 and reports.
 Group-aware training exports and independent snapshot verification are implemented.
 
-### Two command workflows
+## Two command workflows
 
 `trainime` and `dataset` are separate interfaces with different outputs:
 
