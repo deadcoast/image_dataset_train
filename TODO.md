@@ -4,7 +4,7 @@ Updated **2026-11-09**. Only unfinished work is tracked here. Completed steps,
 verification results and historical qualification boundaries are in
 [docs/COMPLETED.md](docs/COMPLETED.md).
 
-Follow [PLAN.md's work order](PLAN.md#work-order-and-completion-boundaries).
+Follow [PLAN.md's work order](docs/PLAN.md#work-order-and-completion-boundaries).
 The earliest open milestone is **M2**. M2–M4 need an explicitly selected collection
 and reviewed examples; M5 representative export acceptance follows that pilot,
 and M6 collection execution follows correction of its findings. Do not search
@@ -22,7 +22,7 @@ unrelated directories for images.
   size, retaining the input identities, settings and results.
 
 Acceptance: representative pair behavior and expected-scale performance, as
-specified in [PLAN section 2](PLAN.md#2-deduplication-and-related-image-groups)
+specified in [PLAN section 2](docs/PLAN.md#2-deduplication-and-related-image-groups)
 and [the similarity contract](docs/SIMILARITY.md).
 
 ### M3 — tagging quality, comparison and runtime qualification
@@ -39,7 +39,7 @@ and [the similarity contract](docs/SIMILARITY.md).
   them; published benchmarks are not collection acceptance.
 
 Acceptance: collection-specific evidence and separately scoped model/provider
-qualification. See [PLAN section 3](PLAN.md#3-local-tagging) and
+qualification. See [PLAN section 3](docs/PLAN.md#3-local-tagging) and
 [docs/TAGGING.md](docs/TAGGING.md).
 
 ### M4 — representative caption and subset acceptance
@@ -54,7 +54,7 @@ qualification. See [PLAN section 3](PLAN.md#3-local-tagging) and
   report; generated fixture judgments do not supply this acceptance.
 
 Acceptance: accurate reviewed pilot captions and suitable rules, following
-[PLAN section 4](PLAN.md#4-caption-normalization-and-review).
+[PLAN section 4](docs/PLAN.md#4-caption-normalization-and-review).
 
 ### M5 — representative export and trainer import acceptance
 
@@ -67,7 +67,7 @@ Acceptance: accurate reviewed pilot captions and suitable rules, following
   resulting image/caption dataset.
 
 Acceptance: the selected pilot's verified export and actual pinned import, following
-[PLAN section 5](PLAN.md#5-split-export-and-trainer-adapters) and
+[PLAN section 5](docs/PLAN.md#5-split-export-and-trainer-adapters) and
 [docs/EXPORT.md](docs/EXPORT.md).
 
 ### M6 — full-collection execution and recorded acceptance
@@ -83,7 +83,7 @@ Acceptance: the selected pilot's verified export and actual pinned import, follo
 
 Acceptance: a qualified collection run with reconciled counts, measured resources,
 corrected pilot problems and recorded human review, following
-[PLAN section 6](PLAN.md#6-report-and-qa).
+[PLAN section 6](docs/PLAN.md#6-report-and-qa).
 
 ## Outstanding interface and platform qualification
 

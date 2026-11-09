@@ -21,11 +21,11 @@ installed or released 0.5.1 build.
 
 ## Scope and authority
 
-The governing design is [PLAN.md](../PLAN.md), especially its work order and
+The governing design is [PLAN.md](PLAN.md), especially its work order and
 completion boundaries. [TODO.md](../TODO.md) tracks unfinished work;
 [COMPLETED.md](COMPLETED.md) records implementation and evidence;
 [TRAINIME.md](TRAINIME.md) defines the separate directory-action contract.
-[TAGGING-METHODS.md](../TAGGING-METHODS.md) preserves the original rough notes and
+[TAGGING-METHODS.md](TAGGING-METHODS.md) preserves the original rough notes and
 examples, including defects explicitly superseded by PLAN.md. Those examples are
 not an alternative specification to implement literally.
 
@@ -611,7 +611,7 @@ cannot complete the missing human/collection acceptance by generating more fixtu
 
 ## Source and contract references
 
-- [PLAN.md](../PLAN.md): reviewed design, artifact flow, M1–M6 ordering and acceptance.
+- [PLAN.md](PLAN.md): reviewed design, artifact flow, M1–M6 ordering and acceptance.
 - [TODO.md](../TODO.md): unfinished requirements and acceptance dependencies.
 - [COMPLETED.md](COMPLETED.md): implementation history and dated verification evidence.
 - [README.md](../README.md): installation, two command workflows and runnable commands.

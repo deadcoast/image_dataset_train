@@ -15,7 +15,7 @@ Its Training import view and `dataset trainer-status` expose export-bound receip
 the current pinned import result, and separate pilot qualification status.
 
 Installation and operational recovery are implemented in 0.4.0:
-[install.cmd](install.cmd) owns setup, and [the recovery contract](docs/INSTALLATION.md)
+[install.cmd](../install.cmd) owns setup, and [the recovery coINSTALLATION.mdATION.md)
 defines logs, diagnosis, automatic repairs, and actionable fixes for remaining failures.
 
 ## Purpose and scope
@@ -64,7 +64,7 @@ in an existing application. The repository initially contained only `OVERVIEW.md
    matched captions on demand, after verified backup. It never overwrites an
    existing caption while tagging. Rejections remain records, not image moves or
    deletions. Derivatives and exports use separate paths. See
-   [the Trainime workflow contract](docs/TRAINIME.md).
+   [the Trainime workflow contract](TRAINIME.md).
 2. **Separate evidence from presentation.** Source hashes, raw scores, model
    revisions, review decisions, normalized tags, and exported captions are distinct.
    Changing thresholds must not require repeating inference.
@@ -145,7 +145,7 @@ outside pHash proposals, and per-image include/exclude decisions. `dataset group
 publishes the resulting connected components. Exact-byte aliases remain members;
 distinct relationships that contradict a group are rejected before saving.
 Exclusions are annotations and do not remove group members or source files.
-See [the review contract](docs/REVIEW.md) and [group-aware export](docs/EXPORT.md).
+See [the review contract](REVIEW.md) and [group-aware export](EXPORT.md).
 
 ### 3. Local tagging
 
@@ -153,7 +153,7 @@ Use WD v3 ONNX as the baseline candidate already named in the notes. SwinV2,
 ViT-Large, and EVA02-Large now have selectable pinned profiles. Compare SwinV2
 with EVA02 on the same pilot before declaring a quality winner. Camie v2 is a
 researched candidate for a separate backend, not a compatible WD model file.
-See [tagging research and implementation](docs/TAGGING.md) for sources and commands.
+See [tagging research and implementation](TAGGING.md) for sources and commands.
 The published benchmark scores do not establish accuracy on this collection.
 Pin the chosen repository revision and hash both `model.onnx` and
 `selected_tags.csv`; download both from the same revision. Model fetch is a
@@ -222,7 +222,7 @@ immutable copy publication, independent verification, and separate Kohya train/
 validation configurations. A pinned trainer import now checks actual upstream
 discovery, captions, repeats, buckets, and CPU tensors. Reviewed labels and subsets
 now feed deterministic semantic group balancing, with coverage and imbalance reports.
-See [export commands](docs/EXPORT.md).
+See [export commands](EXPORT.md).
 
 Default provisional validation ratio: 5%, seed `20261011`. Group before splitting.
 Use group-level deterministic assignment with balancing across configured labels;
@@ -244,7 +244,7 @@ proof that every trainer imports it correctly. [Kohya dataset configuration](htt
 
 ### 6. Report and QA
 
-Implemented: [`dataset qa` and `qa-list`](docs/QA.md) publish a deterministic
+Implemented: [`dataset qa` and `qa-list`](QA.md) publish a deterministic
 pilot and navigate image previews, caption origins/findings, reviewed annotations,
 groups, and category coverage. Group reports preview assignments; verified export
 reports preserve published assignments. `dataset review-ui` records caption and
@@ -312,7 +312,7 @@ each stage rather than accepting configuration that silently does nothing.
 M1 and the tagging execution contract are tested with generated fixtures; pinned
 SwinV2 CPU inference and reference preprocessing also have local smoke evidence.
 The M2 pHash proposal stage has generated-fixture regression coverage and an
-isolated wheel execution check, recorded in [the completion log](docs/COMPLETED.md).
+isolated wheel execution check, recorded in [the completion log](COMPLETED.md).
 Durable decisions, manual
 overrides, and group snapshots have generated-fixture integration coverage.
 Representative anime pair evaluation remains pending. M2-M6 require a

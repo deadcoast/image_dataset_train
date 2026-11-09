@@ -3,7 +3,7 @@
 Extracted from the project TODO on **2026-11-09**. Original milestone dates,
 versions, completed checklist items, verification results, evidence locations and
 qualification limits are retained. Refer to [TODO.md](../TODO.md) for unfinished
-work and [PLAN.md](../PLAN.md) for the governing design and milestone order.
+work and [PLAN.md](PLAN.md) for the governing design and milestone order.
 
 This is a historical completion log, not a claim that every milestone's collection
 acceptance is complete. Earlier limitations describe the evidence available at that
@@ -45,7 +45,7 @@ are relative to the repository root unless an absolute location is specified.
   Representative collection acceptance remains outstanding. Model training belongs
   to the downstream trainer; it is not an unfinished application milestone.
 
-Development follows [PLAN.md's work order and completion boundaries](../PLAN.md#work-order-and-completion-boundaries).
+Development follows [PLAN.md's work order and completion boundaries](PLAN.md#work-order-and-completion-boundaries).
 Unfinished requirements and acceptance evidence are tracked in
 [TODO.md](../TODO.md#remaining-work-against-the-existing-plan). The feature entries
 below are implementation history, not replacement milestones. Launching trainer

@@ -184,7 +184,7 @@ images into whole-group splits and writes separate Kohya configurations.
 Pinned trainer import has generated-fixture CPU evidence; each export can receive
 its own `trainer-check` receipt. Draft regeneration stays independent of review overrides.
 
-- [PLAN.md](PLAN.md): review of the rough notes, pipeline design, acceptance criteria.
+- [PLAN.md](docs/PLAN.md): review of the rough notes, pipeline design, acceptance criteria.
 - [TODO.md](TODO.md): unfinished requirements and acceptance work.
 - [docs/COMPLETED.md](docs/COMPLETED.md): completed steps and dated verification evidence.
 - [docs/TAGGING.md](docs/TAGGING.md): model research, tagging commands, and qualification limits.
@@ -193,7 +193,7 @@ its own `trainer-check` receipt. Draft regeneration stays independent of review 
 - [docs/EXPORT.md](docs/EXPORT.md): split/export commands, caption precedence, and verification.
 - [docs/TRAINIME.md](docs/TRAINIME.md): workflow design, preservation, recovery, and evidence.
 - [docs/INSTALLATION.md](docs/INSTALLATION.md): installer, error logs, doctor, and repair behavior.
-- [TAGGING-METHODS.md](TAGGING-METHODS.md): original notes and example snippets.
+- [TAGGING-METHODS.md](docs/TAGGING-METHODS.md): original notes and example snippets.
 
 ## Technical stage commands
 
