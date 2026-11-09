@@ -185,7 +185,9 @@ Pinned trainer import has generated-fixture CPU evidence; each export can receiv
 its own `trainer-check` receipt. Draft regeneration stays independent of review overrides.
 
 - [PLAN.md](docs/PLAN.md): review of the rough notes, pipeline design, acceptance criteria.
-- [TODO.md](TODO.md): unfinished requirements and acceptance work.
+- [docs/IDENTIFIED.md](docs/IDENTIFIED.md): current review findings and stable source IDs.
+- [docs/SHELVED.md](docs/SHELVED.md): findings ordered by PLAN milestones; source for the next TODO tasks.
+- [TODO.md](TODO.md): active unfinished requirements and acceptance work.
 - [docs/COMPLETED.md](docs/COMPLETED.md): completed steps and dated verification evidence.
 - [docs/TAGGING.md](docs/TAGGING.md): model research, tagging commands, and qualification limits.
 - [docs/SIMILARITY.md](docs/SIMILARITY.md): pHash proposal policy, artifacts, and evidence.

@@ -1,8 +1,17 @@
 # TODO
 
+<!--
+WORKFLOW_UTILIZED: "MIVIM.spec":"TODO"
+WORKFLOW_CYCLE: dataset-preparation-2026-10-11
+WORKFLOW_UPSTREAM: docs/SHELVED.md
+WORKFLOW_COMPLETION: docs/COMPLETED.md
+-->
+
 Updated **2026-11-09**. Only unfinished work is tracked here. Completed steps,
 verification results and historical qualification boundaries are in
 [docs/COMPLETED.md](docs/COMPLETED.md).
+
+Task source: [docs/SHELVED.md](docs/SHELVED.md), derived from IDENTIFIED + PLAN.
 
 Follow [PLAN.md's work order](docs/PLAN.md#work-order-and-completion-boundaries).
 The earliest open milestone is **M2**. M2–M4 need an explicitly selected collection
@@ -13,6 +22,8 @@ unrelated directories for images.
 ## Remaining work against the existing plan
 
 ### M2 — similarity calibration and collection performance
+
+<!-- WORKFLOW_TASK_GROUP: M2; SHELVED: docs/SHELVED.md#m2; ACTIVE_FINDINGS: CF01 -->
 
 - [ ] Select a representative local pilot and review positive/negative anime
   artwork pairs, including known related variants outside the proposal radius.
@@ -26,6 +37,8 @@ specified in [PLAN section 2](docs/PLAN.md#2-deduplication-and-related-image-gro
 and [the similarity contract](docs/SIMILARITY.md).
 
 ### M3 — tagging quality, comparison and runtime qualification
+
+<!-- WORKFLOW_TASK_GROUP: M3; SHELVED: docs/SHELVED.md#m3; ACTIVE_FINDINGS: CF04,CF05,CF06 -->
 
 - [ ] Compare SwinV2 and EVA02 on the same reviewed pilot; qualify the alternate
   WD weights used in that comparison.
@@ -44,6 +57,8 @@ qualification. See [PLAN section 3](docs/PLAN.md#3-local-tagging) and
 
 ### M4 — representative caption and subset acceptance
 
+<!-- WORKFLOW_TASK_GROUP: M4; SHELVED: docs/SHELVED.md#m4; ACTIVE_FINDINGS: CF07 -->
+
 - [ ] Review nonempty pilot captions against their images and correct inaccurate
   or missing critical labels.
 - [ ] Assess configured subset rules, composition/conflict findings and caption
@@ -58,6 +73,8 @@ Acceptance: accurate reviewed pilot captions and suitable rules, following
 
 ### M5 — representative export and trainer import acceptance
 
+<!-- WORKFLOW_TASK_GROUP: M5; SHELVED: docs/SHELVED.md#m5; ACTIVE_FINDINGS: CF08 -->
+
 - [ ] Publish an export from the representative reviewed M2–M4 inputs and verify
   membership, nonempty captions, unique filenames and absence of group/byte leakage
   or unresolved blocking decisions.
@@ -71,6 +88,8 @@ Acceptance: the selected pilot's verified export and actual pinned import, follo
 [docs/EXPORT.md](docs/EXPORT.md).
 
 ### M6 — full-collection execution and recorded acceptance
+
+<!-- WORKFLOW_TASK_GROUP: M6; SHELVED: docs/SHELVED.md#m6; ACTIVE_FINDINGS: CF09,CF10 -->
 
 - [ ] Process the explicitly selected collection and record real-image readability,
   size distribution, caption collisions and duplicate rate.
@@ -87,6 +106,8 @@ corrected pilot problems and recorded human review, following
 
 ## Outstanding interface and platform qualification
 
+<!-- WORKFLOW_TASK_GROUP: interface-platform; SHELVED: docs/SHELVED.md#m1 + docs/SHELVED.md#m6 -->
+
 - [ ] Complete rendered-layout acceptance for reviewer panels whose recorded
   milestone checks lacked visual evidence; keep functional browser checks separate
   from visual and human usability acceptance.
@@ -98,6 +119,8 @@ backup and recovery contracts in [docs/TRAINIME.md](docs/TRAINIME.md) and
 [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
 ## Conditional extensions — not the next required milestones
+
+<!-- WORKFLOW_TASK_GROUP: conditional; SHELVED: docs/SHELVED.md; PROMOTION: condition_must_apply -->
 
 - [ ] Consider normalized-pixel matching as a later extension; evaluate embeddings
   only if representative pHash misses justify them (PLAN section 2).
@@ -112,3 +135,15 @@ ComfyUI inspection remains optional. Model training and training-quality evaluat
 belong to the downstream trainer, outside this preparation backlog.
 [docs/IDENTIFIED.md](docs/IDENTIFIED.md) contains additional improvement proposals;
 they are not automatically approved TODO requirements.
+
+## End-of-document handoff
+
+When this active TODO is complete, move its completed steps and evidence to
+[docs/COMPLETED.md](docs/COMPLETED.md), then pull the next eligible tasks from
+[docs/SHELVED.md](docs/SHELVED.md#promotion-and-completion). Carry the finding IDs
+and PLAN milestone into the next TODO tasks; do not regenerate this backlog from
+scratch or copy every shelved proposal into it.
+
+SHELVED gets its context from [IDENTIFIED](docs/IDENTIFIED.md) and
+[PLAN](docs/PLAN.md). **An empty TODO does not trigger another IDENTIFIED workflow.**
+Only completion of the PLAN, including its required acceptance evidence, does.

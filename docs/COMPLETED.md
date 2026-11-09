@@ -1,5 +1,12 @@
 # Completed work and verification log
 
+<!--
+WORKFLOW_UTILIZED: "MIVIM.spec":"COMPLETE"
+WORKFLOW_CYCLE: dataset-preparation-2026-10-11
+WORKFLOW_UPSTREAM: ../TODO.md
+WORKFLOW_NEXT: SHELVED.md
+-->
+
 Extracted from the project TODO on **2026-11-09**. Original milestone dates,
 versions, completed checklist items, verification results, evidence locations and
 qualification limits are retained. Refer to [TODO.md](../TODO.md) for unfinished
@@ -672,3 +679,16 @@ Research, commands, evidence scope, and pending comparisons are in
   publisher method at `fbd35b187d6e8cb8a00c529d52999f82d6b5193b`.
 - This establishes execution and artifact handling, not accuracy on anime images
   or acceptance of a training dataset.
+
+## End-of-document handoff
+
+Pull completed steps and their actual evidence from [TODO.md](../TODO.md), retaining
+dates, source finding IDs, milestone, verification scope and unresolved acceptance.
+Update the corresponding [SHELVED.md](SHELVED.md) state and link it to the completion
+entry. Do not rewrite historical evidence as stronger qualification.
+
+Continue any unfinished TODO work; when its active batch is complete, refill it
+from SHELVED using [PLAN.md](PLAN.md) order and
+[IDENTIFIED.md](IDENTIFIED.md) provenance. Only when all required PLAN acceptance is
+complete should the next IDENTIFIED cycle begin. This handoff does not itself mark
+the plan complete.

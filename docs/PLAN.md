@@ -1,5 +1,14 @@
 # Dataset preparation plan
 
+<!--
+WORKFLOW_UTILIZED: "MIVIM.spec":"PLAN"
+WORKFLOW_CYCLE: dataset-preparation-2026-10-11
+WORKFLOW_PAIRED_SOURCE: IDENTIFIED.md
+WORKFLOW_DOWNSTREAM: SHELVED.md
+PLAN_STATUS: open
+IDENTIFY_GATE: only_after_current_plan_complete
+-->
+
 Design reviewed: 2026-10-11. Implementation status refreshed: 2026-11-09.
 Intake, local tagging, Trainime directory actions, similarity proposals, durable
 review decisions, caption overrides, and group snapshots are implemented.
@@ -15,7 +24,7 @@ Its Training import view and `dataset trainer-status` expose export-bound receip
 the current pinned import result, and separate pilot qualification status.
 
 Installation and operational recovery are implemented in 0.4.0:
-[install.cmd](../install.cmd) owns setup, and [the recovery coINSTALLATION.mdATION.md)
+[install.cmd](../install.cmd) owns setup, and [the recovery contract](INSTALLATION.md)
 defines logs, diagnosis, automatic repairs, and actionable fixes for remaining failures.
 
 ## Purpose and scope
@@ -332,3 +341,15 @@ local execution or dataset-quality evidence.
 - [ONNX Runtime CUDA requirements](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html): runtime compatibility must be checked at installation.
 - [Pillow image API](https://pillow.readthedocs.io/en/stable/reference/Image.html): lazy loading, verification, and decompression-bomb handling.
 - [Kohya dataset configuration](https://github.com/kohya-ss/sd-scripts/blob/main/docs/config_README-en.md): exporter contract.
+
+## End-of-document handoff
+
+Use this plan together with [IDENTIFIED.md](IDENTIFIED.md) to maintain
+[SHELVED.md](SHELVED.md) in milestone order. Pull the next active task from SHELVED
+into [TODO.md](../TODO.md); preserve the acceptance boundaries above. A queued
+improvement does not automatically add a required milestone or change product scope.
+
+The current plan remains **open**: representative M2–M6 acceptance is outstanding.
+Record actual completion evidence in [COMPLETED.md](COMPLETED.md). Until every
+required milestone's acceptance is satisfied, continue the SHELVED → TODO →
+COMPLETED handoff. Only then close this cycle and run another IDENTIFIED workflow.
