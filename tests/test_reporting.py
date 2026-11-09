@@ -23,8 +23,8 @@ def test_legacy_and_missing_evidence_are_not_zero_observations():
     assert scope["observed_tags"]["unavailable_images"] == 2
     assert scope["composition"] == {"counts": {}, "unavailable_images": 2}
     assert scope["ratings"]["unavailable_images"] == 2
-    assert result["provenance"]["model"] is None
-    assert result["provenance"]["runtime"] is None
+    assert "model" not in result["provenance"]
+    assert "runtime" not in result["provenance"]
     result = content_report(
         members, {}, None, evidence_source="export_provenance", manifest_available=False
     )

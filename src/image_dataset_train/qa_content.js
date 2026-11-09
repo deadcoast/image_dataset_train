@@ -57,7 +57,7 @@ function renderContent() {
     ["Caption run", provenance.run_id], ["Stage", provenance.stage],
     ["Model", model.repo || model.model], ["Revision", model.revision], ["Artifact", model.artifact_id],
     ["Providers", runtime.providers?.join(", ")], ["Requested device", provenance.requested_device],
-    ["Fallback", provenance.provider_fallback === false ? "None" : provenance.provider_fallback],
+    ["Fallback", Object.hasOwn(provenance, "provider_fallback") ? (provenance.provider_fallback || "None") : null],
     ["Preprocessing", provenance.preprocessing], ["Caption rules", provenance.caption_version],
     ["Rules digest", provenance.caption_rules_sha256], ["Manifest digest", provenance.manifest_sha256]
   ].forEach(([name, value]) => {
