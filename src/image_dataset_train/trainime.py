@@ -96,6 +96,12 @@ class Terminal:
     def path(self, label: str, value: Path | str) -> None:
         self.say(Text.assemble((label, "dim"), "  ", (str(value), "cyan")), literal=True)
 
+    def recovery_history(self, home: Path, source: Path) -> None:
+        from image_dataset_train.recovery_catalog_cli import browse_command
+
+        command = browse_command(home, source)["powershell" if os.name == "nt" else "posix"]
+        self.say("Recovery history: " + command, style="dim", literal=True)
+
     def home_menu(self, preferences: Preferences, *, dryrun: bool) -> None:
         self.say()
         self.say(Text.assemble(("trainime", "bold cyan"), (f"  v{__version__}", "dim")))
@@ -258,6 +264,8 @@ class Terminal:
                     style="cyan",
                     literal=True,
                 )
+            if result.repairs and result.repairs.reports:
+                self.recovery_history(result.repairs.reports[0].parent.parent, result.source)
             return
         counts = result.counts
         skipped = counts["blocked"] + counts["rejected"]
@@ -378,6 +386,8 @@ class Terminal:
             self.path("Caption backup", result.backup)
         if result.report:
             self.path("Report", result.report)
+            if result.action == "remove":
+                self.recovery_history(result.report.parent.parent, result.source)
         if issues and result.log:
             self.path("Error log", result.log)
         if result.dryrun and counts["ready"]:

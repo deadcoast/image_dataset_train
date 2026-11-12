@@ -49,6 +49,28 @@ stores these fields under `content`; normal CLI output prints the included count
 ratings, leading tags, and model/provider information. Existing QA reports remain
 readable; generate a new report to add these aggregates.
 
+## Freeze an explicit pilot
+
+The default pilot uses coverage of findings, annotations, geometry, and seeded
+variety. For a deliberately chosen sample, repeat `--image` with exact source
+paths and describe the selection method:
+
+```powershell
+dataset qa --run 'data/runs/<groups-or-export-id>' --image 'portraits/example.png' --image 'scenery/example.jpg' --reason 'Frozen sample covering the documented content and difficulty strata' --json
+```
+
+The explicit list determines pilot membership and count, overriding the requested
+sample size. Missing, excluded, duplicate, or nonmatching paths are rejected before
+publication. The report records the exact ordered source paths, selection method,
+and reason in its hashed summary and run metadata. Paths select occurrences, so
+distinct exact-byte aliases can be selected deliberately. This freezes a sample;
+it does not establish representative or human acceptance.
+
+Reviewer republication preserves explicit membership and reason. A selected image
+that becomes excluded or absent from the successor snapshot must be resolved before a new QA can
+be published. Old snapshots and their assessments remain unchanged. Reports
+without explicit selection continue to use the existing coverage selector.
+
 ## Graphical corrections and pilot assessment
 
 ```powershell
@@ -60,12 +82,30 @@ dataset assessment --run 'data/runs/<qa-id>' --json
 configuration captured by QA; `--config <file>` overrides it. `--no-open` prints
 the URL without launching a browser, and `--port` selects a loopback port.
 
+**Saved browsing** remembers this report's image filters and image/pair positions
+across live reviewer restarts, including a changed server port. Save named filter
+views, reload another session's latest preferences or clear the remembered resume
+position without changing judgments. Explicit image links take priority. See
+[review browsing preferences](REVIEW-PREFERENCES.md) for conflict recovery and the
+standalone report's browser-storage limits.
+
 **Correct saved review** edits inclusion, caption overrides, labels, and subsets
 with a required reason. Typing a caption selects replacement; the caption action
 can also remove an override. Label and subset checkboxes make explicit empty
 choices possible without changing untouched fields. Saves use the same locked,
 hash-bound review store as `dataset review`. Reload saved values after another
 editor changes the review revision. Source images and sidecars remain unchanged.
+
+**Compare caption choices** inside the correction editor shows the saved override,
+recorded sidecar and report-pinned draft, with precedence and literal phrase
+changes. It previews keep/replace/clear without saving and labels frozen export
+evidence separately from current saved reviews. See [the comparison guide](CAPTION-COMPARISON.md)
+for unavailable evidence, offline behavior and publication limits.
+
+Empty image and pair queues distinguish missing membership, filters and completed
+pair decisions. Unavailable previews and saved form reads expose explicit recovery
+actions; see [reviewer recovery](REVIEWER-RECOVERY.md). Preview retry preserves
+unsaved form values. Form reload deliberately replaces only that form's edits.
 
 **Caption rule analysis** shows neutral composition, proposed subsets, overlapping
 rule matches, missing expected tags, and the rule identity from the selected draft
@@ -76,17 +116,39 @@ button. Existing reviewed choices remain unchanged until an explicit correction.
 `qa-list --json` exposes the same analysis; plain output also prints proposals.
 
 **Assess pilot image** judges the saved snapshot displayed above the editor.
-Record a verdict, caption judgment, critical-label checks (correct, missing,
-spurious, or unchecked), reviewer name, and notes. Additional critical labels
-can be added. Progress and per-label checked/error counts cover the selected
-pilot only. These are human-entered judgments, not model scores or population
-accuracy estimates. Names are attribution, not authenticated identities.
+Record a verdict, caption judgment, critical-label checks (present/correct,
+present/missing, absent/predicted, absent/omitted, or unchecked), reviewer name,
+explicit **Reviewer kind** (Human or Assistant), and notes. Add labels absent from
+the caption and mark them **Present / missing**
+to record false negatives. Mark a predicted label **Absent / predicted** when the
+image does not support it; use **Absent / omitted** when both the image and caption
+omit the label. Per-label TP/FP/FN/TN, precision, recall and specificity use only
+checked judgments in the selected pilot. Empty denominators are shown as
+unavailable. These judgments are not model scores or population accuracy
+estimates. Names and reviewer kinds are declared attribution, not authenticated identities.
 
 **Record pilot conclusion** saves an explicit accepted/needs-changes/rejected
 decision. Acceptance requires every selected pilot image to be accepted, with
 its caption and listed critical labels checked as correct. Revising an image
 assessment clears the previous conclusion; its history remains. No conclusion
 automatically approves an export, trains a model, or establishes collection quality.
+
+Every new image assessment and conclusion requires `reviewer_kind: "human"` or
+`reviewer_kind: "assistant"`, including JSON payloads submitted through
+`dataset assessment`. The kind is retained in the current record and history.
+An assistant can record an accepted assessment or conclusion; `human_accepted`
+is true only for a nonempty pilot with every image accepted by an explicitly
+human reviewer and an accepted, explicitly human conclusion. Mixed attribution
+does not establish human acceptance. This status is separate from export
+integrity and trainer import evidence.
+
+Historical records without a reviewer kind remain readable and unchanged. Their
+attribution is **Unknown / legacy**, regardless of the reviewer's display name.
+The reviewer and CLI summary expose human, assistant, and unknown counts for
+assessed and accepted images, plus the conclusion's kind. The image form leaves
+the kind unselected for a legacy record; resaving requires an explicit choice.
+Reloading a form restores saved attribution. Unsaved image and conclusion forms
+keep their choices and revision checks when another form updates.
 
 Assessments persist under `paths.reviews/pilot-assessments/<qa-hash>/assessment.json`,
 including revision history and the exact QA manifest hash. They survive server
@@ -131,8 +193,11 @@ fails. **Open the new snapshot in reviewer** opens the new QA without restarting
 the server. Original reports and source files remain unchanged.
 
 The captured review revision stays fixed even if later edits are saved. Refresh
-status before retrying a stale publication request. Job progress survives page
-reloads while the server is running; published artifacts persist independently.
+status before retrying a stale publication request. Job progress and attempt
+history survive server restarts under the configured review directory. Reopen
+the same QA report and retry: matching, verified earlier outputs are reused;
+changed inputs or settings start a new attempt. See [publication recovery](PUBLICATION.md)
+for storage, interrupted-checkpoint recovery, and concurrency behavior.
 Ctrl+C waits for active publication. Pair previews and publication require the
 original collection and inventory. Publication does not carry forward pilot
 acceptance or run a trainer import; use `dataset trainer-check` for its separate

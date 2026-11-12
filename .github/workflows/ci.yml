@@ -1,0 +1,65 @@
+name: Verify source and installed package
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      PYTHONUTF8: '1'
+      NO_COLOR: '1'
+      HF_HUB_OFFLINE: '1'
+      TRAINIME_HOME: ${{ runner.temp }}/trainime-ci-home
+    steps:
+      # Official release tags resolved to commits on 2026-11-09; see docs/RECOVERY.md.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.9.5'
+          python-version: '3.12'
+          enable-cache: true
+      - name: Install locked development and CPU dependencies
+        run: uv sync --locked --extra tag-cpu
+      - name: Lint
+        run: uv run --no-sync ruff check .
+      - name: Check formatting
+        run: uv run --no-sync ruff format --check .
+      - name: Run source tests
+        run: uv run --no-sync pytest --basetemp .cache/pytest-ci --junitxml .cache/pytest-ci.xml
+      - name: Build wheel and source archive
+        run: uv build --out-dir .cache/ci-dist
+      - name: Export locked installation constraints
+        run: uv export --locked --extra tag-cpu --no-dev --no-emit-project --output-file .cache/package-constraints.txt
+      - name: Verify the installed wheel outside the checkout
+        run: >-
+          uv run --no-sync python scripts/package_smoke.py
+          --wheel .cache/ci-dist
+          --constraints .cache/package-constraints.txt
+          --workspace "${{ runner.temp }}/package smoke"
+          --require-catalog
+      - name: Retain build and verification evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verification-${{ matrix.os }}
+          if-no-files-found: warn
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            .cache/ci-dist/*
+            .cache/pytest-ci.xml
+            ${{ runner.temp }}/package smoke/*.json
+            ${{ runner.temp }}/package smoke/*-logs/*.txt

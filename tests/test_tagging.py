@@ -48,7 +48,12 @@ def labels() -> list[Label]:
 
 
 def make_bundle(
-    directory: Path, labels: list[Label], fixed_batch: int | None = None
+    directory: Path,
+    labels: list[Label],
+    fixed_batch: int | None = None,
+    *,
+    model_name: str = "swinv2-v3",
+    revision: str | None = None,
 ) -> ModelBundle:
     directory.mkdir(parents=True)
     count = len(labels)
@@ -77,9 +82,12 @@ def make_bundle(
     onnx.save(model, directory / "model.onnx")
     text = "name,category\n" + "".join(f"{label.name},{label.category}\n" for label in labels)
     (directory / "selected_tags.csv").write_text(text, encoding="utf-8")
+    # Synthetic graph bytes model the configured identity contract; these fixtures
+    # are not publisher weights and receive no production validation exemption.
+    spec = MODELS[model_name]
     identity = {
-        "repo": "fixture/local-test",
-        "revision": "a" * 40,
+        "repo": spec.repo,
+        "revision": spec.revision if revision is None else revision,
         "files": {
             name: file_sha256(directory / name) for name in ("model.onnx", "selected_tags.csv")
         },
@@ -89,6 +97,7 @@ def make_bundle(
         {
             "schema_version": 1,
             "family": "wd-v3",
+            "model": model_name,
             **identity,
             "artifact_id": fingerprint(identity),
             "label_count": count,

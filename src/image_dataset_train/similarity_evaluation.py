@@ -45,6 +45,42 @@ def threshold_sweep(pairs: list[dict]) -> list[dict]:
     return rows
 
 
+def _split_summary(pairs: list[dict]) -> dict:
+    evaluated = [pair for pair in pairs if pair["status"] == "evaluated" and pair["evaluation_set"]]
+    by_set = {
+        name: [pair for pair in evaluated if pair["evaluation_set"] == name]
+        for name in ("calibration", "held_out")
+    }
+    calibration = threshold_sweep(by_set["calibration"])
+    held_out = threshold_sweep(by_set["held_out"])
+    calibration_classes = {
+        "related": sum(pair["decision"] == "related" for pair in by_set["calibration"]),
+        "distinct": sum(pair["decision"] == "distinct" for pair in by_set["calibration"]),
+    }
+    fit_radius = None
+    if all(calibration_classes.values()):
+        # Deterministic tie-break: prefer the stricter (smaller) radius.
+        fit_radius = max(
+            calibration,
+            key=lambda row: (-1 if row["f1"] is None else row["f1"], -row["max_distance"]),
+        )["max_distance"]
+    return {
+        "counts": {
+            "calibration": len(by_set["calibration"]),
+            "held_out": len(by_set["held_out"]),
+            "calibration_related": calibration_classes["related"],
+            "calibration_distinct": calibration_classes["distinct"],
+            "held_out_related": sum(pair["decision"] == "related" for pair in by_set["held_out"]),
+            "held_out_distinct": sum(pair["decision"] == "distinct" for pair in by_set["held_out"]),
+        },
+        "fit_radius": fit_radius,
+        "calibration_thresholds": calibration,
+        "held_out_at_fit": held_out[fit_radius] if fit_radius is not None else None,
+        "held_out_thresholds": held_out,
+        "fit_rule": "maximum calibration F1; ties choose the smaller radius",
+    }
+
+
 def evaluate_similarity(config: Config, run: Path) -> tuple[Path, dict]:
     """Publish a reproducible threshold evaluation; source bytes and reviews stay untouched."""
     clock = RunClock()
@@ -89,11 +125,19 @@ def evaluate_similarity(config: Config, run: Path) -> tuple[Path, dict]:
     pairs = []
     for (left, right), judgments in sorted(grouped.items()):
         decisions = {j["decision"] for j in judgments}
+        evaluation_sets = {j.get("evaluation_set") for j in judgments}
         conflict = len(decisions) != 1
+        set_conflict = len(evaluation_sets) != 1
         missing = left not in hashes or right not in hashes
         distance = None if missing else (int(hashes[left], 16) ^ int(hashes[right], 16)).bit_count()
         status = (
-            "conflicting_judgments" if conflict else "hash_unavailable" if missing else "evaluated"
+            "conflicting_judgments"
+            if conflict
+            else "conflicting_evaluation_sets"
+            if set_conflict
+            else "hash_unavailable"
+            if missing
+            else "evaluated"
         )
         counts[status] += 1
         pairs.append(
@@ -103,6 +147,7 @@ def evaluate_similarity(config: Config, run: Path) -> tuple[Path, dict]:
                 "left_phash": hashes.get(left),
                 "right_phash": hashes.get(right),
                 "decision": None if conflict else next(iter(decisions)),
+                "evaluation_set": None if set_conflict else next(iter(evaluation_sets)),
                 "distance": distance,
                 "status": status,
                 "judgments": judgments,
@@ -112,6 +157,7 @@ def evaluate_similarity(config: Config, run: Path) -> tuple[Path, dict]:
     counts["indexed_unique_images"] = len(hashes)
     counts["unjudged_indexed_pairs"] = len(hashes) * (len(hashes) - 1) // 2 - counts["evaluated"]
     sweep = threshold_sweep(pairs)
+    evaluation_sets = _split_summary(pairs)
     radius = context.metadata["max_hamming_distance"]
     if type(radius) is not int or not 0 <= radius <= 64:
         raise ValueError("Similarity radius must be between 0 and 64")
@@ -136,6 +182,7 @@ def evaluate_similarity(config: Config, run: Path) -> tuple[Path, dict]:
         "both_classes_reviewed": bool(positives and negatives),
         "current": current,
         "thresholds": sweep,
+        "evaluation_sets": evaluation_sets,
         "error_examples": errors[:20],
         "error_examples_total": len(errors),
         "collection_qualified": False,
@@ -160,7 +207,7 @@ def evaluate_similarity(config: Config, run: Path) -> tuple[Path, dict]:
             "status": "completed",
             "run_id": run_id,
             "pipeline_version": __version__,
-            "evaluation_version": "reviewed-phash-thresholds-v1",
+            "evaluation_version": "reviewed-phash-thresholds-v2",
             "source": str(context.source),
             "source_required": False,
             "similarity_run": str(context.run),

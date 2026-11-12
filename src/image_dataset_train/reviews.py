@@ -27,20 +27,41 @@ from image_dataset_train.diagnostics import atomic_json, publish_directory
 from image_dataset_train.execution import RunClock, intake_counts, processing_history
 from image_dataset_train.inventory import file_sha256
 from image_dataset_train.inventory_data import read_inventory
-
-ELIGIBLE = {"candidate", "review", "duplicate"}
-PAIR_DECISIONS = {"related", "distinct", "unreviewed"}
-IMAGE_DECISIONS = {"include", "exclude", "unreviewed"}
+from image_dataset_train.review_state import (
+    ELIGIBLE as ELIGIBLE,
+)
+from image_dataset_train.review_state import (
+    IMAGE_DECISIONS as IMAGE_DECISIONS,
+)
+from image_dataset_train.review_state import (
+    PAIR_DECISIONS as PAIR_DECISIONS,
+)
+from image_dataset_train.review_state import (
+    PAIR_EVALUATION_SETS as PAIR_EVALUATION_SETS,
+)
+from image_dataset_train.review_state import (
+    _identity as _identity,
+)
+from image_dataset_train.review_state import (
+    _image_key as _image_key,
+)
+from image_dataset_train.review_state import (
+    _json,
+    validate_review_state,
+)
+from image_dataset_train.review_state import (
+    _record as _validate_record,
+)
+from image_dataset_train.review_state import (
+    image_review_operations as image_review_operations,
+)
+from image_dataset_train.review_state import (
+    image_review_proposal as image_review_proposal,
+)
 
 
 class ReviewConflict(ValueError):
     """A saved review changed after an editor loaded it."""
-
-
-def _identity(value: object) -> str:
-    return hashlib.sha256(
-        json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    ).hexdigest()
 
 
 def _separate(source: Path, destination: Path) -> None:
@@ -180,45 +201,14 @@ class ReviewStore:
                 "images": {},
                 "history": [],
             }
-        value = json.loads(self.path.read_text(encoding="utf-8"))
-        if (
-            not isinstance(value, dict)
-            or value.get("schema_version") != 1
-            or value.get("source") != str(self.source)
-            or type(value.get("revision")) is not int
-            or not isinstance(value.get("pairs"), dict)
-            or not isinstance(value.get("images"), dict)
-            or not isinstance(value.get("history"), list)
-            or value["revision"] != len(value["history"])
-        ):
-            raise ValueError(f"Invalid review state: {self.path}. Preserve it before recovery.")
-        for kind, decisions in (("pairs", PAIR_DECISIONS), ("images", IMAGE_DECISIONS)):
-            for key, record in value[kind].items():
-                if (
-                    not isinstance(record, dict)
-                    or not isinstance(record.get("decision"), str)
-                    or record["decision"] not in decisions
-                ):
-                    raise ValueError(f"Invalid {kind} decision in {self.path}")
-                prefixes = ("left_", "right_") if kind == "pairs" else ("",)
-                for prefix in prefixes:
-                    path, digest = record.get(prefix + "source_path"), record.get(prefix + "sha256")
-                    if (
-                        not isinstance(path, str)
-                        or not path
-                        or not isinstance(digest, str)
-                        or len(digest) != 64
-                        or any(c not in "0123456789abcdef" for c in digest)
-                    ):
-                        raise ValueError(f"Invalid review content identity in {self.path}")
-                if kind == "images" and (
-                    key != _image_key(record)
-                    or record.get("caption_override") is not None
-                    and not isinstance(record["caption_override"], str)
-                ):
-                    raise ValueError(f"Invalid image review or caption in {self.path}")
-                if kind == "images":
-                    annotation_fields(record)
+        try:
+            value = _json(self.path.read_bytes())
+            validate_review_state(value, self.source)
+        except (ValueError, TypeError, KeyError) as exc:
+            raise ValueError(
+                f"Invalid review state: {self.path}. {exc}. Preserve it before recovery."
+            ) from exc
+        self._check_paths()
         return value
 
     def update(
@@ -233,6 +223,14 @@ class ReviewStore:
         clear_labels: bool = False,
         expected_revision: int | None = None,
     ) -> dict:
+        if kind not in {"images", "pairs"}:
+            raise ValueError("Review updates require an image or pair target")
+        if expected_revision is not None and (
+            type(expected_revision) is not int or expected_revision < 0
+        ):
+            raise ValueError("Expected review revision must be a nonnegative integer")
+        if context.source != self.source:
+            raise ValueError("Review context source does not match the review store")
         self._check_paths()
         self.directory.mkdir(parents=True, exist_ok=True)
         try:
@@ -249,6 +247,7 @@ class ReviewStore:
                         labels.update(add_labels or [])
                         labels.difference_update(remove_labels or [])
                         record["labels"] = sorted(labels)
+                _validate_record(kind, key, record)
                 if state[kind].get(key) == record:
                     return state
                 state[kind][key] = record
@@ -271,14 +270,12 @@ class ReviewStore:
                         "similarity_run": str(context.run),
                     }
                 )
+                validate_review_state(state, self.source)
+                self._check_paths()
                 atomic_json(self.path, state)
                 return state
         except Timeout as exc:
             raise RuntimeError("Another review update is running. Retry this command.") from exc
-
-
-def _image_key(row: dict) -> str:
-    return _identity([row["source_path"], row["sha256"]])
 
 
 def _active_pair(context: ReviewContext, pair: dict) -> bool:
@@ -374,7 +371,14 @@ def review_status(
         )
         if matches:
             if total >= offset and len(queue) < limit:
-                queue.append({**pair, "decision": decision, "reason": saved.get("reason", "")})
+                queue.append(
+                    {
+                        **pair,
+                        "decision": decision,
+                        "reason": saved.get("reason", ""),
+                        "evaluation_set": saved.get("evaluation_set"),
+                    }
+                )
             total += 1
     groups, conflicts = _groups(context, state)
     eligible = [
@@ -438,6 +442,7 @@ def review_pair(
     decision: str,
     reason: str,
     *,
+    evaluation_set: str | None = None,
     expected_revision: int | None = None,
 ) -> dict:
     if decision not in PAIR_DECISIONS or not reason.strip():
@@ -456,10 +461,14 @@ def review_pair(
             found = pair
     if found is None:
         raise ValueError("Pair ID was not found in this similarity run.")
-    return _save_pair(config, context, found, decision, reason, expected_revision)
+    return _save_pair(config, context, found, decision, reason, evaluation_set, expected_revision)
 
 
-def _save_pair(config, context, found, decision, reason, expected_revision=None):
+def _save_pair(
+    config, context, found, decision, reason, evaluation_set=None, expected_revision=None
+):
+    if evaluation_set not in (None, "") and evaluation_set not in PAIR_EVALUATION_SETS:
+        raise ValueError("Evaluation set must be calibration or held_out.")
     for side in ("left", "right"):
         _verify_source(
             context, context.rows[found[f"{side}_source_path"]], config.validation.max_file_bytes
@@ -469,6 +478,12 @@ def _save_pair(config, context, found, decision, reason, expected_revision=None)
         for key in ("left_source_path", "right_source_path", "left_sha256", "right_sha256")
     }
     record.update(decision=decision, reason=reason.strip())
+    previous = ReviewStore(config.reviews, context.source).read()["pairs"].get(found["pair_id"], {})
+    selected_set = (
+        previous.get("evaluation_set") if evaluation_set is None else evaluation_set or None
+    )
+    if selected_set is not None:
+        record["evaluation_set"] = selected_set
     store = ReviewStore(config.reviews, context.source)
     state = store.update(
         context, "pairs", found["pair_id"], record, expected_revision=expected_revision
@@ -510,6 +525,7 @@ def review_link(
     decision: str,
     reason: str,
     *,
+    evaluation_set: str | None = None,
     expected_revision: int | None = None,
 ) -> dict:
     """Record a relationship even when pHash did not propose the pair."""
@@ -522,6 +538,7 @@ def review_link(
         pair_for_paths(context, paths),
         decision,
         reason,
+        evaluation_set,
         expected_revision,
     )
 

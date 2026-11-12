@@ -10,6 +10,7 @@ from PIL import Image, ImageOps
 from PIL import __version__ as pillow_version
 
 from image_dataset_train.model_bundle import ModelBundle, fingerprint
+from image_dataset_train.score_validation import validate_scores
 
 PREPROCESS_VERSION = "wd-exif-white-square-bicubic-bgr-f32-v1"
 
@@ -27,16 +28,6 @@ def prepare_image(image: Image.Image, size: int) -> np.ndarray:
     if side != size:
         square = square.resize((size, size), Image.Resampling.BICUBIC)
     return np.ascontiguousarray(np.asarray(square, dtype=np.float32)[..., ::-1])
-
-
-def validate_scores(scores: np.ndarray, count: int, batch: int | None = None) -> None:
-    expected = (count,) if batch is None else (batch, count)
-    if scores.shape != expected:
-        raise ValueError(f"WD output shape {scores.shape} does not match {expected}")
-    if not np.issubdtype(scores.dtype, np.floating):
-        raise ValueError("WD scores must be floating-point values")
-    if not np.isfinite(scores).all() or np.any(scores < 0) or np.any(scores > 1):
-        raise ValueError("WD scores must be finite and within [0, 1]; logits are not supported")
 
 
 class WDTagger:

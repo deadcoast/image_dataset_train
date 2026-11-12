@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -107,7 +108,7 @@ def repair_model(home: Path, progress=None, fetch=None) -> Path:
     with FileLock(str(home / "locks" / "model.lock"), timeout=0):
         if (destination / "model.json").exists():
             try:
-                load_bundle(destination)
+                load_bundle(destination, model="swinv2-v3")
                 return destination
             except (OSError, ValueError) as exc:
                 backup = preserve(destination, home, "models")
@@ -117,7 +118,7 @@ def repair_model(home: Path, progress=None, fetch=None) -> Path:
         for attempt in range(2):
             try:
                 result = fetch(root, "swinv2-v3") or destination
-                load_bundle(result)
+                load_bundle(result, model="swinv2-v3")
                 log.event("model_ready", model=result)
                 return result
             except RuntimeError as exc:
@@ -183,6 +184,55 @@ def repair_runtime(home: Path) -> str:
             "Runtime repair did not finish. " + (result.stderr or result.stdout)[-2000:]
         )
     return "Reinstalled and verified the runtime."
+
+
+def _package_check(home: Path, fix: bool) -> Check:
+    """Native imports alone cannot detect missing reviewer assets or trainer pins."""
+    import hashlib
+
+    from image_dataset_train.repair_package import inspect_payload
+
+    receipt_path = home / "install.json"
+    if not receipt_path.is_file():
+        return Check(
+            "package",
+            "warning",
+            "No retained installation wheel is registered.",
+            "Run install.cmd to retain an exact package recovery wheel.",
+        )
+    package = Path(__file__).resolve().parent
+    if package.parent.name != "site-packages":
+        return Check(
+            "package",
+            "warning",
+            "Source/editable checkout; installed payload check skipped.",
+            "Run the registered installed command to verify its retained wheel.",
+        )
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    wheel = Path(receipt["wheel"])
+    if not wheel.is_absolute() or not wheel.is_file():
+        raise ValueError("Retained installation wheel is unavailable; rerun install.cmd.")
+    if hashlib.sha256(wheel.read_bytes()).hexdigest() != receipt.get("wheel_sha256"):
+        raise ValueError("Retained installation wheel checksum mismatch; rerun install.cmd.")
+    issues = inspect_payload(wheel, package.parent)
+    if not issues:
+        return Check(
+            "package", "ok", "Wheel-owned Python files and resources match the retained wheel."
+        )
+    if fix:
+        repair_runtime(home)
+        issues = inspect_payload(wheel, package.parent)
+        if not issues:
+            return Check(
+                "package", "fixed", "Restored and verified wheel-owned files and resources."
+            )
+    detail = "; ".join(f"{item['problem']}: {item['path']}" for item in issues[:3])
+    return Check(
+        "package",
+        "error",
+        f"{len(issues)} damaged package files. {detail}",
+        "Run trainime doctor --fix; verified originals are retained in recovery/application.",
+    )
 
 
 def register_user_path(directory: Path) -> None:
@@ -360,6 +410,32 @@ def _path_check(
     )
 
 
+def _recovery_check(home: Path) -> Check:
+    """Report retained history without treating old failures as current damage."""
+    quoted_home = (
+        "'" + str(home).replace("'", "''") + "'" if os.name == "nt" else shlex.quote(str(home))
+    )
+    command = "dataset recovery --home " + quoted_home
+    try:
+        from image_dataset_train.recovery_catalog import list_recovery
+        from image_dataset_train.recovery_catalog_cli import browse_command
+
+        command = browse_command(home)["powershell" if os.name == "nt" else "posix"]
+        history = list_recovery(home)
+    except Exception as exc:
+        return Check(
+            "recovery_history", "warning", f"Cannot read recovery metadata: {exc}", command
+        )
+    count, errors = len(history["records"]), len(history["errors"])
+    return Check(
+        "recovery_history",
+        "warning" if errors else "ok",
+        f"{count} saved receipts; {errors} unreadable records. "
+        "Metadata only: old failure or running states do not establish current damage or liveness.",
+        command if count or errors else "",
+    )
+
+
 def check_all(
     home: Path, *, fix: bool = False, runtime_only: bool = False, path: Path | None = None
 ) -> list[Check]:
@@ -391,12 +467,15 @@ def check_all(
     if runtime_only:
         return checks
 
+    checks.append(_recovery_check(home))
+
     def attempt(name, operation):
         try:
             checks.append(operation())
         except Exception as exc:
             checks.append(Check(name, "error", str(exc), diagnose(exc).fix))
 
+    attempt("package", lambda: _package_check(home, fix))
     attempt("settings", lambda: _settings_check(home, fix))
     try:
         closest = home
@@ -483,7 +562,7 @@ def check_all(
                     "Model has not finished downloading.",
                     "Run trainime doctor --fix to prepare it, or start Tag Image Directory.",
                 )
-            load_bundle(destination)
+            load_bundle(destination, model="swinv2-v3")
             return Check("model", "ok", "Pinned model and label hashes verified.")
 
         attempt("model", model)
@@ -575,7 +654,9 @@ def main(argv: list[str]) -> int:
                     else check.detail
                 )
                 print(f"[{check.status.upper()}] {check.name}: {detail}")
-                if check.status in {"error", "warning"} and check.fix:
+                if check.name == "recovery_history" and check.fix:
+                    print("  Browse: " + check.fix)
+                elif check.status in {"error", "warning"} and check.fix:
                     print("  Fix: " + check.fix)
             if report:
                 print("Diagnostic report: " + str(report))

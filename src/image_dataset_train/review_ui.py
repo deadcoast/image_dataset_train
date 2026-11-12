@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import mimetypes
@@ -17,6 +18,7 @@ from image_dataset_train.config import Config
 from image_dataset_train.exporting import _checked, _rows, _source_bytes
 from image_dataset_train.inventory import file_sha256
 from image_dataset_train.qa import _commands, _preview, render_qa
+from image_dataset_train.review_preferences import ReviewPreferences
 from image_dataset_train.review_publication import Publication
 from image_dataset_train.reviews import (
     ReviewConflict,
@@ -38,6 +40,9 @@ class ReviewSession:
         self.run = self.assessments.run
         self.meta, self.data = self.assessments.meta, self.assessments.data
         self.entries = self.assessments.entries
+        self.browsing_preferences = ReviewPreferences(
+            config, self.run, self.assessments.digest, self.data
+        )
         # Old QA artifacts already captured the exact similarity run in their command.
         args = self.data["entries"][0]["review_args"] if self.entries else []
         reference = self.meta.get("similarity_run") or (
@@ -85,9 +90,20 @@ class ReviewSession:
         return receipt_artifact(self.receipts[identifier], name)
 
     def page(self):
+        try:
+            browsing_state = self.browsing_preferences.read()
+            browsing_error = None
+        except (ValueError, OSError) as exc:
+            browsing_state = None
+            browsing_error = str(exc)
         return {
             **self.data,
             "session": True,
+            "browsing": {
+                "report_id": self.browsing_preferences.report_id,
+                "state": browsing_state,
+                "error": browsing_error,
+            },
             "publication": {
                 "export": asdict(self.config.export),
                 "captions_run": self.meta.get("caption_run")
@@ -126,6 +142,7 @@ class ReviewSession:
                     **pair,
                     "decision": saved.get("decision", "unreviewed"),
                     "reason": saved.get("reason", ""),
+                    "evaluation_set": saved.get("evaluation_set"),
                 }
             ),
         }
@@ -142,6 +159,7 @@ class ReviewSession:
             [payload["left"], payload["right"]],
             payload["decision"],
             payload["reason"],
+            evaluation_set=payload.get("evaluation_set", ""),
             expected_revision=payload["expected_revision"],
         )
 
@@ -228,6 +246,156 @@ class ReviewSession:
                 )
         return review_image(self.config, self.similarity, entry["source_path"], **options)
 
+    def review_changes(self, *, limit=20, offset=0, kind=None) -> dict:
+        from image_dataset_train.review_changes import inspect_review_changes
+        from image_dataset_train.review_selection import fingerprint
+
+        result = inspect_review_changes(
+            self.config, self.similarity, self.run, limit=limit, offset=offset, kind=kind
+        )
+        if result["report_sha256"] != self.assessments.digest:
+            raise ReviewConflict("This report changed after the page opened; reopen the report")
+        result["inspection_sha256"] = fingerprint(
+            {
+                "report_sha256": result["report_sha256"],
+                "current_store_sha256": result["current_store_sha256"],
+                "metadata_sha256": result["metadata_sha256"],
+            }
+        )
+        return result
+
+    def caption_comparison(self, identifier: str, proposed: dict | None = None) -> dict:
+        from image_dataset_train.caption_comparison import inspect_caption_comparison
+
+        entry = self.entries.get(identifier)
+        if entry is None:
+            raise ValueError("Unknown report image")
+        options = {}
+        if proposed is not None:
+            if (
+                not isinstance(proposed, dict)
+                or proposed.keys() - {"action", "caption"}
+                or proposed.get("action") not in {"keep", "replace", "clear"}
+                or ("caption" in proposed and not isinstance(proposed["caption"], str))
+            ):
+                raise ValueError("Expected a caption preview action and optional caption text")
+            options = proposed
+        result = inspect_caption_comparison(
+            self.config, self.similarity, self.run, identifier, **options
+        )
+        if result["report_sha256"] != self.assessments.digest:
+            raise ReviewConflict("This report changed after the page opened; reopen the report")
+        if result["identity"] != {
+            "source_path": entry["source_path"],
+            "sha256": entry["sha256"],
+        }:
+            raise ReviewConflict("This image changed after the page opened; reopen the report")
+        return result
+
+    def caption_explanation(
+        self, identifier: str, *, tags=None, limit=20, offset=0, expected_run_sha256=None
+    ) -> dict:
+        from image_dataset_train.review_selection import read_metadata_bytes
+
+        if type(limit) is not int or not 1 <= limit <= 200 or type(offset) is not int or offset < 0:
+            raise ValueError("Choose an explanation page with a limit between 1 and 200")
+        if tags is not None and (
+            not isinstance(tags, list)
+            or not 1 <= len(tags) <= 200
+            or any(not isinstance(tag, str) or not tag or "\0" in tag for tag in tags)
+            or len(set(tags)) != len(tags)
+        ):
+            raise ValueError("Choose unique exact model tag names")
+        # The comparison validates the exact report/input/image and its pinned draft.
+        # It remains usable when source images are offline and never changes a review.
+        comparison = self.caption_comparison(identifier)
+        candidate = comparison["candidates"]["draft"]
+        provenance = candidate["provenance"]
+        binding = {
+            "report": comparison["report"],
+            "report_sha256": comparison["report_sha256"],
+            "image_id": identifier,
+            "identity": comparison["identity"],
+        }
+        if candidate["status"] == "absent":
+            return {
+                **binding,
+                "status": "unavailable",
+                "reason_code": "no_draft",
+                "reason": "No model draft was recorded for this image in this report.",
+            }
+        if candidate["status"] == "unavailable":
+            return {
+                **binding,
+                "status": "unavailable",
+                "reason_code": "draft_unavailable",
+                "reason": candidate["error"],
+            }
+        if candidate["status"] == "invalid" and candidate["text"] is None:
+            raise ValueError(candidate["error"])
+        run = Path(provenance["run"])
+        metadata = (
+            Path(comparison["input_run"]) / "provenance/captions-run.json"
+            if comparison["input_stage"] == "export"
+            else run / "run.json"
+        )
+        run_digest = comparison["read_sha256"].get(str(metadata))
+        if run_digest is None:
+            raise ValueError("The report has no verified caption rule metadata")
+        if expected_run_sha256 is not None and expected_run_sha256 != run_digest:
+            raise ReviewConflict(
+                "Saved draft evidence changed; explain it again from the first page"
+            )
+        try:
+            from image_dataset_train.caption_explanations import explain_caption
+
+            result = explain_caption(
+                run,
+                binding["identity"]["source_path"],
+                tags=tags,
+                limit=limit,
+                offset=offset,
+                expected_run_sha256=run_digest,
+                expected_manifest_sha256=provenance["manifest_sha256"],
+                expected_source=str(self.assessments.source),
+                expected_sha256=binding["identity"]["sha256"],
+            )
+        except FileNotFoundError:
+            result = {
+                "status": "unavailable",
+                "reason_code": "scored_run_unavailable",
+                "reason": (
+                    "The original saved scores are unavailable. "
+                    "Restore the recorded caption run to explain its rules."
+                ),
+                "run": str(run),
+            }
+        except ModuleNotFoundError as exc:
+            if exc.name != "numpy":
+                raise
+            result = {
+                "status": "unavailable",
+                "reason_code": "score_reader_unavailable",
+                "reason": (
+                    "Saved-score inspection needs NumPy. Install the tagging support "
+                    "to inspect this draft; no model inference is required."
+                ),
+                "run": str(run),
+            }
+        # Do not make the explanation depend on fresh source sidecars or current
+        # review revisions; only its verified saved report/draft evidence is pinned.
+        for name, digest in comparison["read_sha256"].items():
+            path = Path(name)
+            if path.is_relative_to(self.assessments.source):
+                continue
+            if hashlib.sha256(read_metadata_bytes(path)).hexdigest() != digest:
+                raise ReviewConflict(
+                    "Saved caption evidence changed while explaining; inspect again"
+                )
+        if result.get("status") == "available" and result.get("caption") != candidate["text"]:
+            raise ValueError("Explained caption differs from the report's pinned draft")
+        return {**result, **binding}
+
 
 def make_server(
     config: Config, run: Path, port: int = 0, *, config_path=None
@@ -293,6 +461,8 @@ def make_server(
                 selected, path = self.route()
                 if path == "":
                     self.reply(200, render_qa(selected.page()).encode(), "text/html")
+                elif path == "api/browsing-preferences":
+                    self.reply(200, selected.browsing_preferences.read())
                 elif path == "api/pairs":
                     query = parse_qs(urlsplit(self.path).query)
                     self.reply(
@@ -310,6 +480,16 @@ def make_server(
                     )
                 elif path == "api/publication":
                     self.reply(200, self.publication_state(selected))
+                elif path == "api/review-changes":
+                    query = parse_qs(urlsplit(self.path).query)
+                    self.reply(
+                        200,
+                        selected.review_changes(
+                            limit=int(query.get("limit", ["20"])[0]),
+                            offset=int(query.get("offset", ["0"])[0]),
+                            kind=query.get("kind", [None])[0],
+                        ),
+                    )
                 elif path == "api/training":
                     self.reply(200, selected.training())
                 elif path.startswith("trainer-receipt/"):
@@ -319,6 +499,27 @@ def make_server(
                     state = selected.assessments.read()
                     self.reply(
                         200, {"state": state, "summary": selected.assessments.summary(state)}
+                    )
+                elif path.startswith("api/caption-comparison/"):
+                    self.reply(
+                        200,
+                        selected.caption_comparison(path.removeprefix("api/caption-comparison/")),
+                    )
+                elif path.startswith("api/caption-explanation/"):
+                    query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
+                    if query.keys() - {"tag", "limit", "offset", "expected_run_sha256"} or any(
+                        len(values) != 1 for key, values in query.items() if key != "tag"
+                    ):
+                        raise ValueError("Choose exact tags and one explanation page")
+                    self.reply(
+                        200,
+                        selected.caption_explanation(
+                            path.removeprefix("api/caption-explanation/"),
+                            tags=query.get("tag"),
+                            limit=int(query.get("limit", ["20"])[0]),
+                            offset=int(query.get("offset", ["0"])[0]),
+                            expected_run_sha256=query.get("expected_run_sha256", [None])[0],
+                        ),
                     )
                 elif path.startswith("api/review/"):
                     self.reply(200, selected.review(path.removeprefix("api/review/")))
@@ -355,7 +556,9 @@ def make_server(
                 payload = json.loads(self.rfile.read(length))
                 if not isinstance(payload, dict):
                     raise ValueError("Expected an object")
-                if path == "api/pairs":
+                if path == "api/browsing-preferences":
+                    result = selected.browsing_preferences.save(payload)
+                elif path == "api/pairs":
                     result = selected.save_pair(payload)
                 elif path == "api/similarity-evaluation":
                     result = selected.evaluate_pairs()
@@ -363,6 +566,10 @@ def make_server(
                     result = selected.publication.start(payload)
                 elif path == "api/assessment":
                     result = selected.assessments.save(payload)
+                elif path.startswith("api/caption-comparison/"):
+                    result = selected.caption_comparison(
+                        path.removeprefix("api/caption-comparison/"), payload
+                    )
                 elif path.startswith("api/review/"):
                     result = selected.review(path.removeprefix("api/review/"), payload)
                 else:

@@ -9,6 +9,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
 
+from image_dataset_train.implementation import (
+    implementation_identity,
+    validate_implementation_identity,
+)
+
 # Excluding these final presentation files avoids self-referential size/timing claims.
 REPORT_FILES = {"run.json", "summary.json", "report.html"}
 
@@ -17,6 +22,7 @@ class RunClock:
     def __init__(self) -> None:
         self.started_at = datetime.now(UTC).isoformat()
         self.started = perf_counter()
+        self.implementation = implementation_identity()
 
     def measure(self, root: Path, *, scope: str = "stage_processing") -> dict:
         files = [
@@ -26,6 +32,7 @@ class RunClock:
         ]
         size = sum(p.stat().st_size for p in files)
         return {
+            "implementation": self.implementation,
             "started_at": self.started_at,
             "measured_at": datetime.now(UTC).isoformat(),
             "elapsed_seconds": max(0.0, perf_counter() - self.started),
@@ -44,6 +51,8 @@ def processing_history(*metadata: dict | None) -> list[dict]:
             continue
         current = {key: meta.get(key) for key in ("run_id", "stage", "status", "metrics")}
         for item in [*meta.get("processing_history", []), current]:
+            if isinstance(item.get("metrics"), dict) and "implementation" in item["metrics"]:
+                validate_implementation_identity(item["metrics"]["implementation"])
             if item.get("run_id") and item.get("stage"):
                 receipts.setdefault((item["stage"], item["run_id"]), item)
     return list(receipts.values())

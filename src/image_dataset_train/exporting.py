@@ -89,7 +89,7 @@ def _published(directory: Path, stages: set[str]) -> dict:
 
 
 def _load_groups(
-    directory: Path, *, require_reviewed: bool = True
+    directory: Path, *, require_reviewed: bool = True, allow_prepared: bool = False
 ) -> tuple[dict, list[dict], dict[str, bytes]]:
     meta = _published(directory, {"groups"})
     files = meta.get("files", {})
@@ -97,12 +97,40 @@ def _load_groups(
         name: _checked(directory, name, files.get(name))
         for name in ("groups.jsonl", "reviews.json", "summary.json")
     }
+    prepared = bool(meta.get("preparation_policy"))
+    if prepared:
+        artifacts.update(
+            {
+                name: _checked(directory, name, files.get(name))
+                for name in ("preparation.json", "base-groups.jsonl", "base-groups-run.json")
+            }
+        )
+    return _validate_group_artifacts(
+        meta, artifacts, require_reviewed=require_reviewed, allow_prepared=allow_prepared
+    )
+
+
+def _validate_group_artifacts(
+    meta: dict,
+    artifacts: dict[str, bytes],
+    *,
+    require_reviewed: bool = True,
+    allow_prepared: bool = False,
+) -> tuple[dict, list[dict], dict[str, bytes]]:
+    """Validate captured group evidence without reopening files or reading source media."""
     summary = json.loads(artifacts["summary.json"])
-    if require_reviewed and (
-        summary.get("review_complete") is not True
-        or summary.get("unresolved_pairs") != 0
-        or summary.get("conflicts")
-        or summary.get("similarity_errors") != 0
+    prepared = bool(meta.get("preparation_policy"))
+    if require_reviewed and prepared and not allow_prepared:
+        raise ValueError("This is an automated preparation snapshot; use dataset prepare/resume.")
+    if (
+        require_reviewed
+        and not prepared
+        and (
+            summary.get("review_complete") is not True
+            or summary.get("unresolved_pairs") != 0
+            or summary.get("conflicts")
+            or summary.get("similarity_errors") != 0
+        )
     ):
         raise ValueError("Complete pair and image reviews, then publish a new group snapshot.")
     groups = _rows(artifacts["groups.jsonl"])
@@ -136,6 +164,19 @@ def _load_groups(
         if key != _identity(sorted(identities)):
             raise ValueError("Group membership identity mismatch")
         ids.add(key)
+    if prepared:
+        from image_dataset_train.preparation_policy import verify_preparation
+
+        verify_preparation(meta, groups, artifacts)
+        if require_reviewed and (
+            summary.get("preparation_complete") is not True
+            or summary.get("blockers")
+            or summary.get("conflicts")
+            or summary.get("similarity_errors") != 0
+        ):
+            raise ValueError(
+                "Preparation has blocking findings; inspect status and correct reviews."
+            )
     return meta, groups, artifacts
 
 
@@ -291,17 +332,44 @@ def _prepare_export_image(
         return raw, suffix, width, height, image_format, policy
 
 
+def _caption_for_derivative(text: str, image_transform: str) -> tuple[str, list[dict]]:
+    """Remove only a literal alpha label invalidated by opaque RGB conversion."""
+    if image_transform != "png-exif-white-v1":
+        return text, []
+    phrases = [phrase.strip() for phrase in text.split(",")]
+    removed = [
+        phrase
+        for phrase in phrases
+        if phrase.casefold().replace("_", " ") == "transparent background"
+    ]
+    if not removed:
+        return text, []
+    result = ", ".join(phrase for phrase in phrases if phrase and phrase not in removed)
+    if not result:
+        raise ValueError(
+            "Caption is empty after preparing an opaque image; save a descriptive override"
+        )
+    return result, [
+        {
+            "policy": "opaque-alpha-caption-v1",
+            "reason": "training derivative is opaque RGB",
+            "removed_phrases": removed,
+        }
+    ]
+
+
 def export_dataset(
     config: Config,
     groups_run: Path,
     *,
     captions_run: Path | None = None,
     progress: Callable[[str], None] | None = None,
+    allow_prepared: bool = False,
 ) -> tuple[Path, dict]:
     """Copy approved occurrences into a new self-contained export, then verify before publish."""
     clock = RunClock()
     groups_run = groups_run.resolve(strict=True)
-    meta, groups, artifacts = _load_groups(groups_run)
+    meta, groups, artifacts = _load_groups(groups_run, allow_prepared=allow_prepared)
     source = Path(meta["source"])
     if not source.is_absolute() or not source.is_dir():
         raise ValueError("Group snapshot source directory is unavailable")
@@ -326,6 +394,7 @@ def export_dataset(
     for split in ("train", "validation"):
         (staging / split).mkdir()
     rows = []
+    sidecar_snapshots = {}
     for group_id, member in sorted(included, key=lambda item: item[1]["source_path"]):
         raw = _source_bytes(
             source, member["source_path"], member["sha256"], config.validation.max_file_bytes
@@ -338,7 +407,9 @@ def export_dataset(
                 member["sidecar_sha256"],
                 config.validation.max_file_bytes,
             )
+            sidecar_snapshots[member["sidecar_sha256"]] = sidecar
         caption, origin = _caption(member, sidecar, drafts)
+        source_caption = caption
         identifier = _identity([member["source_path"], member["sha256"]])
         split = assignments[group_id]
         raw, suffix, width, height, image_format, policy = _prepare_export_image(
@@ -347,6 +418,7 @@ def export_dataset(
             config.validation.max_decode_pixels,
             config.export.resolution,
         )
+        caption, caption_transforms = _caption_for_derivative(caption, policy)
         image_name = f"{split}/{identifier}{suffix}"
         caption_name = f"{split}/{identifier}.txt"
         image_path = _path(staging, image_name)
@@ -367,6 +439,8 @@ def export_dataset(
                 "image_transform": policy,
                 "caption_sha256": _digest(caption_bytes),
                 "caption": caption,
+                "source_caption": source_caption,
+                "caption_transforms": caption_transforms,
                 "caption_origin": origin,
                 "caption_analysis": _draft_analysis(member, drafts, draft_meta),
                 "width": width,
@@ -375,7 +449,7 @@ def export_dataset(
             }
         )
         if progress and (len(rows) % 100 == 0 or len(rows) == len(included)):
-            progress(f"Copied {len(rows)}/{len(included)} reviewed image/caption pairs")
+            progress(f"Copied {len(rows)}/{len(included)} image/caption pairs")
     (staging / "manifest.jsonl").write_text(
         "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in rows),
         encoding="utf-8",
@@ -404,8 +478,13 @@ def export_dataset(
         "caption_origins": dict(Counter(row["caption_origin"]["kind"] for row in rows)),
         "exact_byte_aliases": len(rows) - len({row["sha256"] for row in rows}),
         "image_transforms": dict(Counter(row["image_transform"] for row in rows)),
+        "caption_transforms": dict(
+            Counter(change["policy"] for row in rows for change in row["caption_transforms"])
+        ),
         "warnings": warnings,
         "trainer_qualified": False,
+        "preparation_policy": meta.get("preparation_policy"),
+        "human_accepted": False,
         "annotations": split_plan["balance"]["annotations"],
         "split_algorithm": split_plan["algorithm"],
     }
@@ -413,6 +492,10 @@ def export_dataset(
     atomic_json(staging / "splits.json", split_plan)
     evidence = staging / "provenance"
     evidence.mkdir()
+    if sidecar_snapshots:
+        (evidence / "sidecars").mkdir()
+        for digest, data in sidecar_snapshots.items():
+            (evidence / "sidecars" / f"{digest}.txt").write_bytes(data)
     for name, raw in artifacts.items():
         (evidence / name).write_bytes(raw)
     atomic_json(evidence / "groups-run.json", meta)
@@ -425,10 +508,17 @@ def export_dataset(
         (staging / f"{split}.toml").write_text(
             _adapter(split, config.export), encoding="utf-8", newline="\n"
         )
+    from image_dataset_train.dataset_catalog import write_catalog
+
+    catalog = write_catalog(staging, rows)
     files = {
         path.relative_to(staging).as_posix(): file_sha256(path)
         for path in staging.rglob("*")
-        if path.is_file() and path.parent not in (staging / "train", staging / "validation")
+        if path.is_file()
+        and (
+            path.parent not in (staging / "train", staging / "validation")
+            or path.name == "metadata.jsonl"
+        )
     }
     metadata = {
         "schema_version": 1,
@@ -439,6 +529,7 @@ def export_dataset(
         "groups_run": str(groups_run),
         "caption_run": str(captions_run.resolve()) if captions_run else None,
         "caption_analysis_version": 1,
+        "caption_source_version": 1,
         "review_revision": meta["review_revision"],
         "pipeline_version": __version__,
         "started_at": clock.started_at,
@@ -448,6 +539,9 @@ def export_dataset(
         "source_revalidated": True,
         "included_sidecars_revalidated": True,
         "trainer_qualified": False,
+        "preparation_policy": meta.get("preparation_policy"),
+        "human_accepted": False,
+        "catalog": catalog,
     }
     atomic_json(staging / "run.json", metadata)
     receipt = _verify_export(staging, metadata)
@@ -483,6 +577,27 @@ def _verify_export(directory: Path, meta: dict) -> dict:
         raise ValueError("Export manifest is empty")
     summary, splits = json.loads(raw["summary.json"]), json.loads(raw["splits.json"])
     groups = _rows(raw["provenance/groups.jsonl"])
+    group_meta = json.loads(raw["provenance/groups-run.json"])
+    if group_meta.get("preparation_policy"):
+        from image_dataset_train.preparation_policy import verify_preparation
+
+        if meta.get("preparation_policy") != group_meta["preparation_policy"]:
+            raise ValueError("Export preparation policy differs from its group evidence")
+        verify_preparation(
+            group_meta,
+            groups,
+            {
+                name.removeprefix("provenance/"): data
+                for name, data in raw.items()
+                if name.startswith("provenance/")
+            },
+        )
+        if meta.get("human_accepted") is not False or summary.get("human_accepted") is not False:
+            raise ValueError("Prepared exports must not claim human acceptance")
+    if meta.get("catalog") is not None:
+        from image_dataset_train.dataset_catalog import verify_catalog_payload
+
+        verify_catalog_payload(directory, meta["catalog"], rows)
     drafts, draft_meta = {}, None
     if meta.get("caption_analysis_version") == 1 and meta.get("caption_run"):
         drafts, draft_meta = _export_drafts(directory, meta)
@@ -500,6 +615,21 @@ def _verify_export(directory: Path, meta: dict) -> dict:
     }
     expected_subset_origins = {
         (g["group_id"], m["source_path"], m["sha256"]): m.get("subset_origin")
+        for g in groups
+        for m in g["members"]
+        if m["review_decision"] == "include"
+    }
+    expected_origins = {
+        (g["group_id"], m["source_path"], m["sha256"]): (
+            m.get("decision_origin"),
+            m.get("prepared_duplicate_of"),
+        )
+        for g in groups
+        for m in g["members"]
+        if m["review_decision"] == "include"
+    }
+    expected_caption_inputs = {
+        (g["group_id"], m["source_path"], m["sha256"]): m
         for g in groups
         for m in g["members"]
         if m["review_decision"] == "include"
@@ -523,6 +653,38 @@ def _verify_export(directory: Path, meta: dict) -> dict:
             raise ValueError("Export annotations differ from the reviewed snapshot")
         if row.get("subset_origin") != expected_subset_origins.get(identity):
             raise ValueError("Export subset provenance differs from the reviewed snapshot")
+        if (row.get("decision_origin"), row.get("prepared_duplicate_of")) != expected_origins.get(
+            identity
+        ):
+            raise ValueError("Export decision attribution differs from its group snapshot")
+        if meta.get("caption_source_version") == 1:
+            member = expected_caption_inputs.get(identity)
+            if member is None:
+                raise ValueError("Export caption source member is missing")
+            for field in (
+                "caption_override",
+                "caption_rule_version",
+                "sidecar_path",
+                "sidecar_sha256",
+            ):
+                if row.get(field) != member.get(field):
+                    raise ValueError("Export caption inputs differ from the frozen group")
+            sidecar = None
+            if member.get("sidecar_path"):
+                sidecar = raw[f"provenance/sidecars/{member['sidecar_sha256']}.txt"]
+                if _digest(sidecar) != member["sidecar_sha256"]:
+                    raise ValueError("Archived source caption hash mismatch")
+            original_caption, origin = _caption(member, sidecar, drafts)
+            prepared_caption, adjustments = _caption_for_derivative(
+                original_caption, row["image_transform"]
+            )
+            if (
+                row.get("source_caption") != original_caption
+                or row["caption"] != prepared_caption
+                or row.get("caption_transforms") != adjustments
+                or row["caption_origin"] != origin
+            ):
+                raise ValueError("Export caption adjustment differs from its original evidence")
         if meta.get("caption_analysis_version") == 1 and row.get("caption_analysis") != (
             _draft_analysis(row, drafts, draft_meta)
         ):

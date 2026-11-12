@@ -450,6 +450,7 @@ def test_pilot_assessment_persists_errors_conclusion_and_cli_summary(reviewed, c
         "image_id": entry["id"],
         "expected_revision": 0,
         "reviewer": "Fixture reviewer",
+        "reviewer_kind": "human",
         "notes": "Verified fixture caption",
         "verdict": "accepted",
         "caption_check": "correct",
@@ -458,6 +459,7 @@ def test_pilot_assessment_persists_errors_conclusion_and_cli_summary(reviewed, c
     conclude = {
         "expected_revision": 0,
         "reviewer": "Fixture reviewer",
+        "reviewer_kind": "human",
         "notes": "Synthetic pilot complete",
         "verdict": "accepted",
     }
@@ -482,6 +484,36 @@ def test_pilot_assessment_persists_errors_conclusion_and_cli_summary(reviewed, c
     assert reopened.read()["history"] == result["state"]["history"]
     assert main(["assessment", "--run", str(qa), "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["assessed_images"] == 1
+
+
+def test_pilot_label_metrics_count_explicit_absence_and_exclude_unchecked(reviewed):
+    config, groups, drafts = reviewed
+    qa, _ = create_qa(config, groups, captions_run=drafts, sample_size=100)
+    store = PilotAssessment(config.reviews, qa)
+    entries = list_qa(qa, pilot=True)["entries"]
+    assert len(entries) == 4
+    for entry, check in zip(entries, ("correct", "spurious", "missing", "absent"), strict=True):
+        store.save(
+            {
+                "image_id": entry["id"],
+                "expected_revision": store.read()["revision"],
+                "reviewer": "Synthetic fixture reviewer",
+                "reviewer_kind": "assistant",
+                "notes": "Explicit label evidence for metric regression",
+                "verdict": "needs_changes",
+                "caption_check": "not_checked",
+                "label_checks": {"critical label": check, "unchecked label": "not_checked"},
+            }
+        )
+    metrics = store.summary()["critical_labels"]
+    checked = metrics["critical label"]
+    assert (checked["tp"], checked["fp"], checked["fn"], checked["tn"]) == (1, 1, 1, 1)
+    assert (checked["checked"], checked["errors"]) == (4, 2)
+    assert checked["precision"] == checked["recall"] == checked["specificity"] == 0.5
+    unchecked = metrics["unchecked label"]
+    assert unchecked["checked"] == unchecked["errors"] == 0
+    assert unchecked["precision"] is unchecked["recall"] is unchecked["specificity"] is None
+    assert not store.summary()["human_accepted"]
 
 
 def test_pair_review_and_snapshot_export_publication(reviewed):

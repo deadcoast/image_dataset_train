@@ -1,6 +1,6 @@
-# Human review and group snapshots
+# Review corrections and group snapshots
 
-The technical workflow now preserves human decisions between runs:
+The technical workflow preserves explicit review decisions between runs:
 
 ```text
 dataset scan -> inventory -> dataset similarity -> pair proposals
@@ -10,6 +10,10 @@ group snapshots -> dataset export -> verified train/validation pairs
 ```
 
 Review is available through the CLI and the [local graphical reviewer](QA.md).
+
+[Judgment integrity checks](REVIEW-INTEGRITY.md) validate persisted current state,
+history and attribution before reads or saves. Invalid evidence is preserved for
+recovery; it is never silently reset or reattributed.
 For CLI review, inspect images in your preferred viewer and use the printed paths.
 These commands never write, move, or delete source images or source captions.
 `trainime tag` remains a separate workflow that writes missing source sidecars.
@@ -28,6 +32,7 @@ dataset review --run 'data/runs/<similarity-id>' --images
 
 # Save a pair decision using an unambiguous ID prefix printed by the first command.
 dataset review --run 'data/runs/<similarity-id>' --pair <pair-prefix> --decision related --reason 'Variants of the same artwork'
+dataset review --run 'data/runs/<similarity-id>' --pair <pair-prefix> --decision related --evaluation-set calibration --reason 'Representative related example'
 
 # Link related artwork even if pHash did not propose it.
 dataset review --run 'data/runs/<similarity-id>' --link 'art.png' 'edits/art.png' --decision related --reason 'Original and edited version'
@@ -52,6 +57,10 @@ Listings default to 20 pending entries. Use `--limit 100` for a larger page or
 `--all` to include completed decisions; saving decisions removes them from the
 pending view. `--json` exposes the complete returned records and counts, including
 intake flags in the image view. `--all` still respects `--limit`.
+Assign reviewed pairs to `calibration` or `held_out` with `--evaluation-set` or
+the pair-review panel. Omitting the option preserves an existing assignment.
+`similarity-evaluate` selects the radius with the highest calibration F1 (ties
+prefer the smaller radius) and reports held-out metrics separately at that radius.
 Saved manual links appear alongside proposals. Resetting either kind to
 `unreviewed` returns it to the pending queue and makes group review incomplete.
 
@@ -63,7 +72,22 @@ version. They do not overwrite model drafts or source sidecars; recaption contin
 to produce drafts from scores. [Export](EXPORT.md) applies overrides before source
 captions and optional model drafts.
 
+In the local reviewer, [caption comparison](CAPTION-COMPARISON.md) shows those
+candidates together and previews keeping, replacing or removing an override.
+Refreshing comparison preserves unsaved correction and assessment fields.
+For empty queues, missing previews and failed saved-form reads, use the
+[reviewer recovery controls](REVIEWER-RECOVERY.md). Preview retries preserve edits;
+an explicit form reload replaces that form with its current saved values.
+
+To inspect earlier image/pair changes or recover a mistaken correction, use
+[review history and guarded restoration](REVIEW-HISTORY.md). Restoration appends a
+new revision while preserving the original history and published snapshots.
+
 ## Reviewed labels and subsets
+
+Use [bulk review](BULK-REVIEW.md) to inspect and atomically change an explicit set
+of images. Membership is listed before apply, and each changed image retains its
+own attributed history within the batch. Captions and human assessments are separate.
 
 ```powershell
 dataset review --run 'data/runs/<similarity-id>' --image 'art.png' --label portrait --label outdoors --subset solo --reason 'Inspected composition'
@@ -76,7 +100,7 @@ dataset review --run 'data/runs/<similarity-id>' --image 'art.png' --subset-from
 
 Labels are additive; repeat `--label` or `--remove-label` for multiple changes.
 `--subset` replaces the single semantic subset choice. Names are case-folded and
-whitespace-normalized. These are explicit human annotations, independent of model
+whitespace-normalized. These are explicit reviewed annotations, independent of model
 tags, caption text, filenames, and include/exclude decisions. Edits require a
 reason, preserve captions, and merge under the same review lock.
 

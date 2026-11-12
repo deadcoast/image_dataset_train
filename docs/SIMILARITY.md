@@ -38,7 +38,10 @@ hashes are used directly; original images can be offline, while the referenced
 inventory, similarity artifacts and review store must remain available.
 
 The report compares radii 0–64, inclusive, with true/false positives and negatives,
-precision, recall and F1. It shows false matches and known misses at the original
+precision, recall and F1. The all-reviewed-pair sweep remains descriptive. When
+reviewers assign pairs to `calibration` and `held_out`, it also fits the radius by
+maximum calibration F1 (ties prefer the smaller radius) and reports held-out metrics
+at that radius separately. It shows false matches and known misses at the original
 proposal radius; graphical examples reopen the pair for correction. The saved
 evaluation retains its review revision when judgments later change.
 
@@ -50,9 +53,10 @@ are counted outside the scored sample. Undefined ratios are `null`, not perfect 
 
 Review both related and distinct examples, including independently selected pairs
 outside the proposal queue. A proposal-only sample cannot establish missed-match
-behavior for the collection. No threshold is selected automatically and no collection
-qualification is inferred. `pairs.jsonl` preserves judged hashes, distances, paths,
-decisions and reasons so the threshold results can be reproduced.
+behavior for the collection. A fitted radius is exploratory evidence and does not
+qualify the collection. Unassigned pairs are excluded from the fit and held-out
+evaluation, but remain in the descriptive all-reviewed-pair sweep. `pairs.jsonl`
+preserves judged hashes, distances, paths, decisions, reasons and set assignments.
 
 ## Input and preservation
 

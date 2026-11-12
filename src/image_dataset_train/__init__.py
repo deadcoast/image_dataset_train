@@ -1,3 +1,3 @@
 """Local image dataset preparation."""
 
-__version__ = "0.5.1"
+__version__ = "0.19.0"

@@ -112,6 +112,67 @@ def test_similarity_evaluation_reports_missing_hashes_stale_and_unreviewed_decis
     )
 
 
+def test_similarity_evaluation_fits_calibration_and_reports_held_out_separately(prepared):
+    config, run, _ = prepared
+    review_link(
+        config,
+        run,
+        ["a.png", "b.png"],
+        "related",
+        "calibration positive",
+        evaluation_set="calibration",
+    )
+    review_link(
+        config,
+        run,
+        ["a.png", "c.png"],
+        "distinct",
+        "calibration negative",
+        evaluation_set="calibration",
+    )
+    review_link(
+        config,
+        run,
+        ["b.png", "c.png"],
+        "distinct",
+        "held-out negative",
+        evaluation_set="held_out",
+    )
+    review_link(
+        config,
+        run,
+        ["a.png", "d.png"],
+        "related",
+        "known byte alias",
+        evaluation_set="calibration",
+    )
+
+    _, summary = evaluate_similarity(config, run)
+
+    split = summary["evaluation_sets"]
+    assert split["counts"] == {
+        "calibration": 2,
+        "held_out": 1,
+        "calibration_related": 1,
+        "calibration_distinct": 1,
+        "held_out_related": 0,
+        "held_out_distinct": 1,
+    }
+    assert split["fit_radius"] is not None
+    assert split["calibration_thresholds"][split["fit_radius"]]["f1"] is not None
+    assert split["held_out_at_fit"]["recall"] is None
+    assert summary["counts"]["exact_byte_judgments"] == 1
+
+    retained = review_link(config, run, ["a.png", "b.png"], "related", "retained assignment")
+    state = json.loads(next(config.reviews.rglob("reviews.json")).read_text(encoding="utf-8"))
+    assert state["pairs"][retained["pair_id"]]["evaluation_set"] == "calibration"
+    cleared = review_link(
+        config, run, ["a.png", "b.png"], "related", "clear assignment", evaluation_set=""
+    )
+    state = json.loads(next(config.reviews.rglob("reviews.json")).read_text(encoding="utf-8"))
+    assert "evaluation_set" not in state["pairs"][cleared["pair_id"]]
+
+
 def test_reviews_persist_form_groups_detect_conflicts_and_keep_captions(prepared):
     config, run, pairs = prepared
     before = {p.name: p.read_bytes() for p in config.source.iterdir()}

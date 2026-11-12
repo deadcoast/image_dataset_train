@@ -97,7 +97,7 @@ def test_remove_is_recoverable_and_leaves_unrelated_files(collection):
     }
     events = [
         json.loads(line)["event"]
-        for line in (result.report / "journal.jsonl").read_text().splitlines()
+        for line in (result.report / "journal.jsonl").read_text(encoding="utf-8").splitlines()
     ]
     assert events == ["backup_verified", "removed", "backup_verified", "removed"]
     assert run_directory("remove", source, home).changed == 0

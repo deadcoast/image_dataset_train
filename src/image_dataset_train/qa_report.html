@@ -46,16 +46,20 @@ th{color:#68736c;font-weight:500}td button{padding:3px 8px}
 .workflow-pane{max-width:1250px;margin:auto}.pair-layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:22px}
 .pair-images{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.pair-images figure{margin:0;min-width:0}.pair-images figcaption{overflow-wrap:anywhere;font-weight:600}
 .pair-images .image-area{height:300px}.pair-list{max-height:600px;overflow:auto}.publish-results{overflow-wrap:anywhere}.publish-results li{margin:12px 0}
+.review-changes{margin:18px 0}.review-change-list{display:grid;gap:12px;padding:0 8px 0 0;list-style:none;max-height:28rem;overflow:auto;overscroll-behavior:contain}.review-change-list li{border-top:1px solid var(--line);padding-top:12px;min-width:0;overflow-wrap:anywhere}.review-change-list pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 ui-monospace,monospace;background:#f7f9f5;padding:10px}.review-change-list summary{cursor:pointer}.review-changes .fields{display:flex;flex-wrap:wrap;align-items:center}.review-changes .fields>label{flex:0 1 220px}.review-changes .fields>p{flex:1 1 260px}
+.caption-comparison,.caption-preview{border:1px solid var(--line);border-radius:5px;padding:12px;margin:0 0 16px;min-width:0}.caption-comparison summary{margin:0;overflow-wrap:anywhere}.caption-comparison pre,.caption-preview pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:13rem;overflow:auto;font:13px/1.5 ui-monospace,monospace;background:#f7f9f5;padding:10px;margin:8px 0}.caption-comparison h3,.caption-preview h3{font-size:14px;margin:12px 0 6px}.caption-candidates{display:grid;gap:10px}.caption-candidates>details{border-top:1px solid var(--line);padding-top:10px}.caption-comparison .toolbar{margin:12px 0 8px;flex-wrap:wrap}.caption-preview ul{padding-left:22px;max-height:13rem;overflow:auto;overflow-wrap:anywhere}.caption-preview li{white-space:pre-wrap}
 .report-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:24px}.report-grid section{min-width:0}.report-grid td,.report-grid dd{overflow-wrap:anywhere}.report-grid pre{white-space:pre-wrap;overflow-wrap:anywhere}.report-grid h2{margin-top:24px}.table-scroll{max-height:450px;overflow:auto}.report-grid th{position:sticky;top:0;background:#f4f3ee}.report-grid .facts{grid-template-columns:140px minmax(0,1fr)}
 @media(max-width:750px){.pair-layout{grid-template-columns:1fr}.pair-list{max-height:180px}.pair-images .image-area{height:200px}.fields{grid-template-columns:1fr}}
 @media(max-width:1000px){.layout{grid-template-columns:210px 1fr}.workspace{grid-template-columns:1fr}.queue{max-height:180px}.image-area{height:300px}main{padding:20px}}
 @media(max-width:650px){header{padding:18px}.layout{display:block}aside{border-right:0;border-bottom:1px solid var(--line);padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:8px 15px}aside h2{grid-column:1/-1}label{margin:0}.metrics{gap:15px;flex-wrap:wrap}.image-area{height:250px}main{padding:15px}.toolbar{flex-wrap:wrap}}
+.caption-explanation-rows{max-height:28rem;overflow:auto;overflow-wrap:anywhere;margin:12px 0}.caption-explanation-rows article{border-top:1px solid var(--line);padding:10px 0}.caption-explanation-rows h3{margin:0}.caption-explanation-rows p{margin:4px 0}#captionExplanationSubset,#captionExplanationPhrases{max-height:20rem;overflow:auto;overflow-wrap:anywhere}#captionExplanationSubset li,#captionExplanationPhrases li{margin:5px 0}
+#savedBrowsing{grid-column:1/-1;min-width:0}
 </style>
 </head>
 <body>
 <header><small>Dataset preparation / QA</small><h1>Pilot review</h1>
 <p id="context"></p><div class="metrics" id="metrics"></div><p id="saveNotice" role="status"></p>
-<nav id="workflowTabs" class="workflow-tabs" aria-label="Review workflow"><button id="imagesTab" aria-pressed="true">Images &amp; pilot</button><button id="contentTab" aria-pressed="false">Snapshot report</button><button id="pairsTab" aria-pressed="false" hidden>Related pairs</button><button id="publishTab" aria-pressed="false" hidden>Publish</button><button id="trainingTab" aria-pressed="false" hidden>Training import</button></nav><p id="trainingIndicator" class="muted" hidden></p></header>
+<nav id="workflowTabs" class="workflow-tabs" aria-label="Review workflow"><button id="imagesTab" aria-pressed="true">Images &amp; pilot</button><button id="contentTab" aria-pressed="false">Snapshot report</button><button id="pairsTab" aria-pressed="false" hidden>Related pairs</button><button id="publishTab" aria-pressed="false" hidden>Publish</button><button id="trainingTab" aria-pressed="false" hidden>Training import</button></nav><p id="browsingStatus" class="muted status" role="status"></p><p id="trainingIndicator" class="muted" hidden></p></header>
 <main id="contentPane" class="workflow-pane" hidden>
 <section id="runAccounting"><h2>Count reconciliation and processing</h2>
 <p id="reconciliationStatus" role="status"></p>
@@ -78,7 +82,7 @@ th{color:#68736c;font-weight:500}td button{padding:3px 8px}
 </div></div></main>
 <div class="layout" id="imagesPane">
 <aside><h2>Review queue</h2>
-<label>Search<input id="search" type="search" placeholder="Path, caption, or label"></label>
+<label>Search<input id="search" type="search" maxlength="512" placeholder="Path, caption, or label"></label>
 <label>Finding<select id="finding"><option value="">All findings</option></select></label>
 <label>Label<select id="label"><option value="">All labels</option></select></label>
 <label>Subset<select id="subset"><option value="">All subsets</option></select></label>
@@ -86,13 +90,21 @@ th{color:#68736c;font-weight:500}td button{padding:3px 8px}
 <label>Decision<select id="decision"><option value="">All decisions</option></select></label>
 <label class="check"><input type="checkbox" id="pilot">Pilot selection only</label>
 <button id="reset">Clear filters</button><p id="groupFilter" class="muted" hidden></p>
+<details class="editor" id="savedBrowsing"><summary>Saved browsing</summary>
+<p class="muted">Filters and queue positions only. Corrections and judgments are saved separately.</p>
+<label for="savedBrowsingViews">Named filter view<select id="savedBrowsingViews"><option value="">Choose a saved view</option></select></label>
+<div class="actions"><button id="applyBrowsingView" type="button">Apply view</button><button id="deleteBrowsingView" type="button">Delete view</button></div>
+<label for="browsingViewName">View name<input id="browsingViewName" type="text" maxlength="80" autocomplete="off"></label>
+<button id="saveBrowsingView" type="button">Save view</button>
+<div class="actions"><button id="reloadBrowsing" type="button">Reload saved browsing</button><button id="clearBrowsingResume" type="button">Clear saved resume</button></div>
+</details>
 </aside>
 <main><div class="toolbar"><span id="position" aria-live="polite"></span>
 <div><button id="previous">← Previous</button> <button id="next">Next →</button></div></div>
 <div class="workspace"><nav id="queue" class="queue" aria-label="Images"></nav>
 <article class="detail" id="detail"><h2 id="path"></h2><div class="badges" id="badges"></div>
-<div class="image-area"><img id="preview" alt=""><span id="noPreview" class="muted" hidden>Preview unavailable</span></div>
-<div class="actions"><a id="openImage" target="_blank" rel="noopener">Open full image</a><button id="sameGroup">View group</button></div>
+<div class="image-area"><img id="preview" alt=""><span id="noPreview" class="muted status" role="status" hidden>Preview unavailable</span></div>
+<div class="actions"><button id="retryPreview" type="button" hidden>Retry preview</button><a id="openImage" target="_blank" rel="noopener">Open full image</a><button id="sameGroup">View group</button></div>
 <h2>Snapshot caption</h2><div id="caption" class="caption"></div><p id="captionMeta" class="muted"></p>
 <dl class="facts" id="facts"></dl><div id="findings" class="badges"></div><p id="errors" class="muted"></p>
 <section id="ruleAnalysis" class="editor" hidden><h2>Caption rule analysis</h2><p id="ruleAnalysisText"></p><p id="ruleMissingTags" class="status"></p><p id="ruleIdentity" class="muted status"></p><p class="muted">Scored evidence and configured rules propose a subset. The reviewed subset above controls splits.</p></section>
@@ -100,15 +112,42 @@ th{color:#68736c;font-weight:500}td button{padding:3px 8px}
 <details class="editor" open><summary>Correct saved review</summary>
 <p class="muted">Changes save to the shared CLI review store. Publish new groups and QA/export to refresh snapshot captions and coverage.</p>
 <p id="reviewStatus" class="status" role="status"></p>
-<form id="correctionForm"><fieldset id="correctionFields" disabled>
+<form id="correctionForm">
+<details id="captionComparison" class="caption-comparison"><summary>Compare caption choices</summary>
+<p class="muted">Saved override, then source sidecar, then pinned draft. The snapshot caption above stays unchanged.</p>
+<div class="toolbar"><button id="refreshCaptionComparison" type="button">Refresh comparison</button><p id="captionComparisonStatus" class="status">Select an image to compare captions.</p></div>
+<p id="captionComparisonRevision" class="muted"></p><p id="captionComparisonWarnings" class="status"></p>
+<div id="captionComparisonCandidates" class="caption-candidates"></div>
+<button id="explainDraftRules" type="button" aria-expanded="false" aria-controls="captionExplanation">Explain draft rules</button>
+<section id="captionExplanation" class="editor" aria-label="Saved draft rule explanation" hidden>
+<p class="muted">Why the saved model draft includes or omits tags. Your override, source caption and exported caption are separate choices.</p>
+<p id="captionExplanationStatus" class="status" role="status"></p>
+<div class="actions"><label for="captionExplanationTag">Exact model tag<input id="captionExplanationTag" type="search" placeholder="For example: blue_hair" autocomplete="off" spellcheck="false"></label><button id="inspectCaptionTag" type="button">Inspect tag</button><button id="showCaptionTags" type="button">Show relevant tags</button></div>
+<div id="captionExplanationResult" hidden>
+<p id="captionExplanationSummary" class="status"></p>
+<details><summary>Saved draft text and identity</summary><pre id="captionExplanationCaption" tabindex="0"></pre><pre id="captionExplanationIdentity" tabindex="0"></pre></details>
+<div id="captionExplanationRows" class="caption-explanation-rows" tabindex="0" aria-label="Tag decisions"></div>
+<div class="actions"><button id="previousCaptionTags" type="button" disabled>Previous tags</button><span id="captionExplanationPage" class="muted" role="status"></span><button id="nextCaptionTags" type="button" disabled>Next tags</button></div>
+<details><summary>Subset rule decisions</summary><div id="captionExplanationSubset"></div></details>
+<details><summary>Trigger, forced phrases and duplicate handling</summary><div id="captionExplanationPhrases"></div></details>
+</div>
+</section>
+<details><summary>Keep and remove outcomes</summary><div id="captionComparisonAlternatives"></div></details>
+</details>
+<fieldset id="correctionFields" disabled>
 <div class="fields"><label>Inclusion decision<select id="editDecision"><option value="unreviewed">Unreviewed</option><option value="include">Include</option><option value="exclude">Exclude</option></select></label>
 <label>Caption action<select id="captionAction"><option value="keep">Keep saved override</option><option value="replace">Save this caption as override</option><option value="clear">Remove override; use source/draft</option></select></label></div>
 <label>Caption override<textarea id="editCaption"></textarea></label>
+<section class="caption-preview" aria-labelledby="captionComparisonAction">
+<h3 id="captionComparisonAction">Preview for the selected caption action</h3><p id="captionPreviewStatus" class="status" role="status"></p><p id="captionComparisonOrigin" class="muted"></p><pre id="captionComparisonEffective" tabindex="0" aria-label="Effective caption preview"></pre>
+<h3>Literal phrase changes from the saved caption</h3><p id="captionComparisonChangesStatus" class="muted"></p><ul id="captionComparisonChanges"></ul>
+<p class="muted">Effective text uses caption whitespace normalization. These are source-caption choices; export image conversions can adjust the final caption. Previewing does not save a correction.</p>
+</section>
 <div class="fields"><div><label>Labels (one per line)<textarea id="editLabels"></textarea></label><label class="check"><input id="writeLabels" type="checkbox">Save this label set</label></div>
 <div><label>Subset<input id="editSubset" type="text"></label><button id="useSubsetProposal" type="button" hidden>Use proposed subset</button><label class="check"><input id="writeSubset" type="checkbox">Save this subset (blank clears)</label></div></div>
 <label>Reason for correction<input id="editReason" type="text" required></label>
-<div class="actions"><button class="primary" type="submit">Save corrections</button><button id="reloadReview" type="button">Reload saved values</button></div>
-</fieldset></form></details>
+</fieldset><div class="actions"><button id="saveReview" class="primary" type="submit" disabled>Save corrections</button><button id="reloadReview" type="button">Reload saved values</button></div>
+</form></details>
 <details class="editor" open><summary>Assess pilot image</summary>
 <p class="muted">Judge the saved snapshot shown above. Corrections do not change this snapshot. Record remaining problems before producing a revised pilot.</p>
 <p id="assessmentStatus" class="status" role="status"></p>
@@ -117,19 +156,20 @@ th{color:#68736c;font-weight:500}td button{padding:3px 8px}
 <label>Caption judgment<select id="captionCheck"><option value="not_checked">Not checked</option><option value="correct">Correct</option><option value="incorrect">Incorrect</option></select></label></div>
 <h2>Critical labels</h2><div id="labelChecks"></div>
 <div class="actions"><input id="newCriticalLabel" type="text" aria-label="Additional critical label" placeholder="Additional critical label"><button id="addCriticalLabel" type="button">Add label</button></div>
-<label>Reviewer<input id="reviewer" type="text" required autocomplete="name"></label>
+<div class="fields"><label>Reviewer<input id="reviewer" type="text" required autocomplete="name"></label><label>Reviewer kind<select id="reviewerKind" required><option value="">Choose reviewer kind</option><option value="human">Human</option><option value="assistant">Assistant</option></select></label></div>
+<p class="muted">Record who performed this assessment. Older judgments without a kind remain unattributed.</p>
 <label>Assessment notes<textarea id="assessmentNotes" required></textarea></label>
-<div class="actions"><button class="primary" type="submit">Save assessment</button><button id="reloadAssessment" type="button">Reload assessment</button></div>
-</fieldset></form></details>
+</fieldset><div class="actions"><button id="saveAssessment" class="primary" type="submit" disabled>Save assessment</button><button id="reloadAssessment" type="button">Reload assessment</button></div>
+</form></details>
 </div>
 <div class="actions"><button id="copy">Copy review command</button><span id="copyState" class="muted" role="status"></span></div>
 <textarea id="command" aria-label="Review command" readonly spellcheck="false"></textarea>
 <p class="muted">This report captures a saved revision. Make corrections with the review command, then publish new groups and regenerate QA.</p>
-</article><p id="empty" class="empty" hidden>No images match these filters.</p></div>
-<section id="pilotAssessment" class="pilot-summary" hidden><h2>Recorded pilot assessment</h2><p id="pilotProgress"></p><p id="pilotErrors"></p><p id="pilotConclusion"></p>
-<form id="conclusionForm"><div class="fields"><label>Pilot conclusion<select id="conclusion"><option value="needs_changes">Needs changes</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option><option value="unreviewed">Clear conclusion</option></select></label>
-<label>Reviewer<input id="conclusionReviewer" type="text" required></label></div><label>Conclusion notes<input id="conclusionNotes" type="text" required></label>
-<button class="primary" type="submit">Record pilot conclusion</button><p id="conclusionStatus" role="status"></p></form></section>
+</article><section id="empty" class="empty" hidden><p id="emptyMessage" role="status"></p><div class="actions"><button id="showAllImages" type="button">Show all images</button><button id="emptySnapshot" type="button">View snapshot report</button></div></section></div>
+<section id="pilotAssessment" class="pilot-summary" hidden><h2>Recorded pilot assessment</h2><p id="pilotProgress"></p><p id="pilotAttribution"></p><p id="pilotErrors"></p><p id="pilotMetrics"></p><p id="pilotConclusion"></p><p id="pilotHumanAcceptance"></p>
+<form id="conclusionForm"><fieldset id="conclusionFields" style="border:0;padding:0"><div class="fields"><label>Pilot conclusion<select id="conclusion"><option value="needs_changes">Needs changes</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option><option value="unreviewed">Clear conclusion</option></select></label>
+<label>Reviewer<input id="conclusionReviewer" type="text" required></label><label>Conclusion reviewer kind<select id="conclusionReviewerKind" required><option value="">Choose reviewer kind</option><option value="human">Human</option><option value="assistant">Assistant</option></select></label></div><label>Conclusion notes<input id="conclusionNotes" type="text" required></label>
+<div class="actions"><button class="primary" type="submit">Record pilot conclusion</button><button id="reloadConclusion" type="button">Reload conclusion</button></div><p id="conclusionStatus" role="status"></p></fieldset></form></section>
 <section class="coverage"><h2>Split coverage</h2><p class="muted">Select a category to inspect its images. Related groups stay together; a category in one group cannot span both splits.</p>
 <table><thead><tr><th>Category</th><th>Groups</th><th>Train</th><th>Validation / target</th><th>Coverage</th></tr></thead><tbody id="coverage"></tbody></table></section>
 </main></div>
@@ -138,22 +178,31 @@ th{color:#68736c;font-weight:500}td button{padding:3px 8px}
 <p>Related images stay in one split. Distinct images must remain in separate groups. Exact-byte aliases always share a group.</p>
 <div class="pair-layout"><div><label>Pair decision filter<select id="pairFilter"><option value="unreviewed">Unreviewed</option><option value="all">All pairs</option><option value="related">Related</option><option value="distinct">Distinct</option></select></label>
 <nav id="pairQueue" class="queue pair-list" aria-label="Pair queue"></nav><div class="actions"><button id="pairPrev">Previous page</button><button id="pairNext">Next page</button></div>
-<details><summary>Compare another pair</summary><p class="muted">Enter two exact inventory paths, including pairs missed by similarity proposals.</p>
+<details id="manualPair"><summary>Compare another pair</summary><p class="muted">Enter two exact inventory paths, including pairs missed by similarity proposals.</p>
 <label>Left image path<input id="manualLeft" type="text" list="imagePaths"></label><label>Right image path<input id="manualRight" type="text" list="imagePaths"></label><datalist id="imagePaths"></datalist><button id="comparePair">Compare images</button></details></div>
-<article class="detail"><p id="pairMessage" class="status" role="status"></p><div id="pairDetail" hidden>
-<div class="pair-images"><figure><figcaption id="leftPairName"></figcaption><div class="image-area"><img id="leftPairImage" alt="Left comparison image"></div></figure><figure><figcaption id="rightPairName"></figcaption><div class="image-area"><img id="rightPairImage" alt="Right comparison image"></div></figure></div>
+<article class="detail"><p id="pairMessage" class="status" role="status"></p><div id="pairRecovery" class="actions"><button id="showAllPairs" type="button" hidden>Show all pairs</button><button id="openManualPair" type="button" hidden>Compare two images</button><button id="pairSnapshot" type="button" hidden>View snapshot report</button></div><div id="pairDetail" hidden>
+<div class="pair-images"><figure><figcaption id="leftPairName"></figcaption><div class="image-area"><img id="leftPairImage" alt="Left comparison image"><span id="leftPairUnavailable" class="muted status" role="status" hidden></span></div><button id="retryLeftPairImage" type="button" hidden>Retry left image</button></figure><figure><figcaption id="rightPairName"></figcaption><div class="image-area"><img id="rightPairImage" alt="Right comparison image"><span id="rightPairUnavailable" class="muted status" role="status" hidden></span></div><button id="retryRightPairImage" type="button" hidden>Retry right image</button></figure></div>
 <p id="pairInfo" class="muted"></p><form id="pairForm"><fieldset id="pairFields" style="border:0;padding:0"><label>Relationship<select id="pairDecision"><option value="unreviewed">Unreviewed</option><option value="related">Related</option><option value="distinct">Distinct</option></select></label>
-<label>Reason for pair decision<input id="pairReason" type="text" required></label><div class="actions"><button class="primary" type="submit">Save pair decision</button><button id="reloadPair" type="button">Reload this pair</button></div></fieldset></form></div></article></div>
+<label>Evaluation set<select id="pairEvaluationSet"><option value="">Unassigned</option><option value="calibration">Calibration</option><option value="held_out">Held out</option></select></label>
+<label>Reason for pair decision<input id="pairReason" type="text" required></label></fieldset><div class="actions"><button id="savePair" class="primary" type="submit">Save pair decision</button><button id="reloadPair" type="button">Reload this pair</button></div></form></div></article></div>
 <section class="coverage"><h2>Evaluate similarity thresholds</h2>
 <p>Compare all 65 pHash radii against saved related/distinct judgments, including manually reviewed pairs outside the proposal radius. Saves a new evaluation; source files and reviews stay unchanged.</p>
 <button id="evaluatePairs">Evaluate saved judgments</button><p id="pairEvaluationStatus" role="status"></p>
-<div id="pairEvaluation" hidden><p id="pairEvaluationCoverage"></p><p id="pairEvaluationCurrent"></p>
-<p class="muted">Metrics cover reviewed unique content pairs only. Exact-byte pairs are separate; aliases do not multiply a judgment. Review missed pairs and distinct examples as well as proposed matches. These sample metrics do not qualify the collection or choose a threshold automatically.</p>
+<div id="pairEvaluation" hidden><p id="pairEvaluationCoverage"></p><p id="pairEvaluationCurrent"></p><p id="pairEvaluationSplit"></p>
+<p class="muted">Metrics cover reviewed unique content pairs only. Exact-byte pairs are separate; aliases do not multiply a judgment. Review missed pairs and distinct examples as well as proposed matches. A calibration fit and held-out result are exploratory and do not qualify the collection.</p>
 <details><summary>Compare thresholds</summary><div class="table-scroll"><table><thead><tr><th>Radius</th><th>True matches</th><th>False matches</th><th>Known misses</th><th>True distinct</th><th>Precision</th><th>Recall</th><th>F1</th></tr></thead><tbody id="pairThresholds"></tbody></table></div></details>
 <h2>False matches and known misses at the proposal radius</h2><p id="pairEvaluationErrorCount"></p><div id="pairEvaluationErrors" class="actions"></div><p id="pairEvaluationPath" class="status"></p></div></section>
 </main>
 <main id="publishPane" class="workflow-pane" hidden><h2>Publish reviewed snapshots</h2><p id="publicationReadiness" class="status" role="status"></p>
 <p>Each action captures current saved reviews. Groups may be incomplete; exports require completed pair/image decisions and usable captions. Existing snapshots remain unchanged.</p>
+<section id="reviewChangesPanel" class="detail review-changes" aria-labelledby="reviewChangesHeading">
+<div class="toolbar"><h2 id="reviewChangesHeading">Changes since this report</h2><button id="refreshReviewChanges" type="button">Refresh changes</button></div>
+<p id="reviewChangesStatus" class="status" role="status">Refresh to inspect saved changes.</p><p id="reviewChangesRevision" class="muted"></p>
+<p class="muted">These are saved review records. Publish a new snapshot below to see their effect on the dataset. Source files and this report stay unchanged.</p>
+<div class="fields"><label for="reviewChangesKind">Changed records<select id="reviewChangesKind"><option value="">Images and pairs</option><option value="images">Images</option><option value="pairs">Pairs</option></select></label><p id="reviewChangesCounts" class="muted"></p></div>
+<ul id="reviewChangesList" class="review-change-list"></ul>
+<div class="actions"><button id="reviewChangesPrev" type="button" disabled>Previous changes</button><span id="reviewChangesPage" role="status"></span><button id="reviewChangesNext" type="button" disabled>Next changes</button></div>
+</section>
 <p id="publicationDestinations" class="muted"></p>
 <form id="publicationForm" class="detail"><fieldset id="publicationFields" style="border:0;padding:0">
 <label>Caption draft run (optional)<input id="publicationCaptions" type="text" placeholder="Tagging or recaption run directory"></label>

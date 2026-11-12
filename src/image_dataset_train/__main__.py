@@ -1,3 +1,3 @@
-from image_dataset_train.cli import main
+from image_dataset_train.bootstrap import dataset_main
 
-raise SystemExit(main())
+raise SystemExit(dataset_main())

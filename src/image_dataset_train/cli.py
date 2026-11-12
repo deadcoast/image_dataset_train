@@ -20,6 +20,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
+    from image_dataset_train.caption_explanations_cli import register_commands as explain_commands
+    from image_dataset_train.caption_restore_cli import register_commands as restore_commands
+    from image_dataset_train.collection_catalog_cli import register_commands as collection_commands
+    from image_dataset_train.dataset_catalog_cli import register_commands as catalog_commands
+    from image_dataset_train.preparation_cli import register_commands as preparation_commands
+    from image_dataset_train.recovery_catalog_cli import register_commands as recovery_commands
+    from image_dataset_train.review_batch_cli import register_commands as batch_commands
+    from image_dataset_train.review_history_cli import register_commands as history_commands
+    from image_dataset_train.snapshot_comparison_cli import register_commands as comparison_commands
+
+    preparation_commands(commands)
+    recovery_commands(commands)
+    batch_commands(commands)
+    history_commands(commands)
+    collection_commands(commands)
+    catalog_commands(commands)
+    restore_commands(commands)
+    comparison_commands(commands)
+    explain_commands(commands)
     scan = commands.add_parser("scan", help="inventory, validate, and identify exact duplicates")
     scan.add_argument("--config", type=Path, default=Path("config.toml"))
     scan.add_argument(
@@ -71,6 +90,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--decision", choices=["related", "distinct", "include", "exclude", "unreviewed"]
     )
     review.add_argument("--reason", default="", help="reason for changing a decision or caption")
+    review.add_argument(
+        "--evaluation-set",
+        choices=["calibration", "held_out"],
+        help="save this pair in the M2 calibration or held-out evaluation set",
+    )
+    review.add_argument(
+        "--clear-evaluation-set",
+        action="store_true",
+        help="remove this pair's calibration/held-out assignment",
+    )
     caption = review.add_mutually_exclusive_group()
     caption.add_argument("--caption", help="durable manual caption override")
     caption.add_argument("--caption-file", type=Path, help="read a UTF-8 caption override")
@@ -138,6 +167,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--sample-size", type=int, default=50, help="maximum pilot images (default: 50)"
     )
     qa.add_argument(
+        "--image",
+        action="append",
+        help="exact source path to include in the frozen pilot; repeatable",
+    )
+    qa.add_argument("--reason", help="reason for the explicit pilot membership (requires --image)")
+    qa.add_argument(
         "--seed",
         type=int,
         default=20261011,
@@ -161,6 +196,78 @@ def build_parser() -> argparse.ArgumentParser:
         "--config", type=Path, help="defaults to the QA report's saved configuration"
     )
     assessment.add_argument("--json", action="store_true")
+    label_pilot = commands.add_parser(
+        "label-pilot", help="freeze a QA pilot and raw label vocabulary for model evaluation"
+    )
+    label_pilot.add_argument("--run", type=Path, required=True, help="saved group QA report")
+    label_pilot.add_argument("--reference", type=Path, required=True, help="saved scored run")
+    label_pilot.add_argument("--label", action="append", required=True, help="raw WD tag name")
+    label_pilot.add_argument(
+        "--image",
+        action="append",
+        help="explicit source path from QA; repeat to freeze a chosen set",
+    )
+    label_pilot.add_argument("--reason", required=True, help="selection rationale and known bias")
+    label_pilot.add_argument("--seed", type=int, default=20261011)
+    label_pilot.add_argument(
+        "--probability-sample-size", type=int, help="draw unique original contents from the full QA"
+    )
+    label_pilot.add_argument(
+        "--selection-seed", type=int, help="explicit probability draw seed, separate from --seed"
+    )
+    label_pilot.add_argument(
+        "--partition-groups",
+        type=Path,
+        help="verified full-population groups used only for partitioning",
+    )
+    label_pilot.add_argument("--held-out-fraction", type=float, default=0.33)
+    label_pilot.add_argument("--config", type=Path, default=Path("config.toml"))
+    label_pilot.add_argument("--json", action="store_true")
+    label_refresh = commands.add_parser(
+        "label-refresh", help="carry a frozen pilot and judgments into a corrected group snapshot"
+    )
+    label_refresh.add_argument("--workspace", type=Path, required=True)
+    label_refresh.add_argument(
+        "--groups", type=Path, required=True, help="new published group snapshot"
+    )
+    label_refresh.add_argument("--reason", required=True, help="reason for correcting grouping")
+    label_refresh.add_argument("--expected-revision", type=int, required=True)
+    label_refresh.add_argument("--config", type=Path, default=Path("config.toml"))
+    label_refresh.add_argument("--json", action="store_true")
+    label_review = commands.add_parser(
+        "label-review", help="show or save actual label presence independently of predictions"
+    )
+    label_review.add_argument("--workspace", type=Path, required=True)
+    label_review.add_argument("--image", help="exact frozen source path or image SHA256")
+    label_review.add_argument("--label", help="raw tag in the frozen vocabulary")
+    label_review.add_argument("--value", choices=["present", "absent", "uncertain", "unreviewed"])
+    label_review.add_argument("--reviewer")
+    label_review.add_argument("--reviewer-kind", choices=["human", "assistant"])
+    label_review.add_argument("--notes")
+    label_review.add_argument("--expected-revision", type=int)
+    label_review.add_argument("--json", action="store_true")
+    label_ui = commands.add_parser(
+        "label-ui", help="review frozen critical labels in a local browser"
+    )
+    label_ui.add_argument("--workspace", type=Path, required=True)
+    label_ui.add_argument(
+        "--run", type=Path, action="append", default=[], help="optional scored comparison"
+    )
+    label_ui.add_argument("--config", type=Path)
+    label_ui.add_argument("--port", type=int, default=0)
+    label_ui.add_argument("--no-open", action="store_true")
+    label_eval = commands.add_parser(
+        "tag-evaluate", help="compare saved scores and fit thresholds using frozen label judgments"
+    )
+    label_eval.add_argument("--workspace", type=Path, required=True)
+    label_eval.add_argument(
+        "--run", type=Path, action="append", required=True, help="repeat per model"
+    )
+    label_eval.add_argument(
+        "--include-assistant", action="store_true", help="include diagnostic judgments"
+    )
+    label_eval.add_argument("--config", type=Path, default=Path("config.toml"))
+    label_eval.add_argument("--json", action="store_true")
     queue = commands.add_parser("qa-list", help="filter and page through a saved QA report")
     queue.add_argument("--run", type=Path, required=True)
     for name in ("finding", "label", "subset", "group"):
@@ -197,6 +304,103 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        from image_dataset_train import (
+            caption_explanations_cli,
+            caption_restore_cli,
+            collection_catalog_cli,
+            dataset_catalog_cli,
+            preparation_cli,
+            recovery_catalog_cli,
+            review_batch_cli,
+            review_history_cli,
+            snapshot_comparison_cli,
+        )
+
+        if args.command in preparation_cli.COMMANDS:
+            return preparation_cli.run_command(args)
+        if args.command in recovery_catalog_cli.COMMANDS:
+            return recovery_catalog_cli.run_command(args)
+        if args.command in review_batch_cli.COMMANDS:
+            return review_batch_cli.run_command(args)
+        if args.command in review_history_cli.COMMANDS:
+            return review_history_cli.run_command(args)
+        if args.command in collection_catalog_cli.COMMANDS:
+            return collection_catalog_cli.run_command(args)
+        if args.command in dataset_catalog_cli.COMMANDS:
+            return dataset_catalog_cli.run_command(args)
+        if args.command in caption_restore_cli.COMMANDS:
+            return caption_restore_cli.run_command(args)
+        if args.command in snapshot_comparison_cli.COMMANDS:
+            return snapshot_comparison_cli.run_command(args)
+        if args.command in caption_explanations_cli.COMMANDS:
+            return caption_explanations_cli.run_command(args)
+        if args.command == "label-ui":
+            from image_dataset_train.label_review_ui import serve_label_reviews
+            from image_dataset_train.label_workspace import LabelWorkspace
+
+            workspace = LabelWorkspace(args.workspace)
+            qa_meta = json.loads(
+                (Path(workspace.selection["qa_run"]) / "run.json").read_text(encoding="utf-8")
+            )
+            config_path = args.config or Path(qa_meta["config_path"])
+            serve_label_reviews(
+                load_config(config_path),
+                args.workspace,
+                scored_runs=tuple(args.run),
+                port=args.port,
+                open_browser=not args.no_open,
+            )
+            return 0
+        if args.command == "label-review":
+            from image_dataset_train.label_workspace import LabelWorkspace
+
+            workspace = LabelWorkspace(args.workspace)
+            if args.value is not None:
+                result = workspace.save(
+                    {
+                        "image": args.image,
+                        "label": args.label,
+                        "value": args.value,
+                        "reviewer": args.reviewer,
+                        "reviewer_kind": args.reviewer_kind,
+                        "notes": args.notes,
+                        "expected_revision": args.expected_revision,
+                    }
+                )
+            else:
+                if any(
+                    value is not None
+                    for value in (
+                        args.image,
+                        args.label,
+                        args.reviewer,
+                        args.reviewer_kind,
+                        args.notes,
+                        args.expected_revision,
+                    )
+                ):
+                    raise ValueError(
+                        "Use --value with a complete label judgment, or omit edit options"
+                    )
+                state = workspace.read()
+                result = {
+                    "state": state,
+                    "summary": workspace.summary(state),
+                    "selection": workspace.selection,
+                }
+            if args.json:
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+            else:
+                summary = result["summary"]
+                print(f"Label workspace: {workspace.directory}; revision {summary['revision']}")
+                print(
+                    f"Unique images: {summary['unique_images']}; "
+                    f"unreviewed labels: {summary['unreviewed_labels']}"
+                )
+                print("Judgments: " + json.dumps(summary["judgments"]))
+                print("Reviewers: " + json.dumps(summary["reviewer_kinds"]))
+                print("Use --json to inspect frozen paths, evaluation sets and saved judgments.")
+            return 0
         if args.command == "qa-list":
             from image_dataset_train.qa import list_qa
 
@@ -252,6 +456,63 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 args.config = Path("config.toml")
         config = load_config(args.config)
+        if args.command == "label-pilot":
+            from image_dataset_train.label_workspace import LabelWorkspace, create_label_workspace
+
+            directory = create_label_workspace(
+                config,
+                args.run,
+                args.reference,
+                args.label,
+                selection_reason=args.reason,
+                seed=args.seed,
+                held_out_fraction=args.held_out_fraction,
+                source_paths=args.image,
+                probability_sample_size=args.probability_sample_size,
+                selection_seed=args.selection_seed,
+                partition_groups=args.partition_groups,
+            )
+            summary = LabelWorkspace(directory).summary()
+            print(
+                json.dumps(summary, ensure_ascii=False, indent=2)
+                if args.json
+                else f"Frozen label workspace: {directory}\n"
+                f"Images: {summary['unique_images']}; "
+                f"unreviewed labels: {summary['unreviewed_labels']}"
+            )
+            return 0
+        if args.command == "label-refresh":
+            from image_dataset_train.label_workspace import LabelWorkspace, refresh_label_workspace
+
+            directory = refresh_label_workspace(
+                config,
+                args.workspace,
+                args.groups,
+                reason=args.reason,
+                expected_parent_revision=args.expected_revision,
+            )
+            summary = LabelWorkspace(directory).summary()
+            print(
+                json.dumps(summary, ensure_ascii=False, indent=2)
+                if args.json
+                else f"Refreshed label workspace: {directory}\n"
+                f"Carried-forward revision: {summary['revision']}; "
+                f"unreviewed labels: {summary['unreviewed_labels']}"
+            )
+            return 0
+        if args.command == "tag-evaluate":
+            from image_dataset_train.tagging_evaluation import evaluate_labels
+
+            directory, result = evaluate_labels(
+                config, args.workspace, args.run, include_assistant=args.include_assistant
+            )
+            if args.json:
+                print(json.dumps({"run": str(directory), **result}, ensure_ascii=False, indent=2))
+            else:
+                print(f"Saved label evaluation: {directory}")
+                print("See result.json for coverage, baseline and calibration/held-out metrics.")
+                print("Proposed thresholds were not applied. Dataset acceptance remains separate.")
+            return 0
         if args.command == "review-ui":
             from image_dataset_train.review_ui import serve_reviews
 
@@ -284,6 +545,8 @@ def main(argv: list[str] | None = None) -> int:
                 sample_size=args.sample_size,
                 seed=args.seed,
                 config_path=args.config,
+                pilot_source_paths=args.image,
+                selection_reason=args.reason,
             )
             if args.json:
                 print(json.dumps({"run": str(directory), **summary}, ensure_ascii=False, indent=2))
@@ -483,16 +746,29 @@ def main(argv: list[str] | None = None) -> int:
                 or args.subset is not None
                 or args.clear_subset
             )
+            if (args.evaluation_set is not None or args.clear_evaluation_set) and not (
+                args.pair or args.link
+            ):
+                raise ValueError("Evaluation sets apply to pair decisions, not images.")
             if args.pair or args.link:
+                if args.evaluation_set is not None and args.clear_evaluation_set:
+                    raise ValueError("Choose --evaluation-set or --clear-evaluation-set.")
                 if has_caption or has_annotations:
                     raise ValueError("Caption overrides and annotations require --image.")
                 if args.decision is None:
                     raise ValueError("Provide --decision related, distinct, or unreviewed.")
                 action = review_link if args.link else review_pair
                 result = action(
-                    config, args.run, args.link or args.pair, args.decision, args.reason
+                    config,
+                    args.run,
+                    args.link or args.pair,
+                    args.decision,
+                    args.reason,
+                    evaluation_set="" if args.clear_evaluation_set else args.evaluation_set,
                 )
             elif args.image:
+                if args.evaluation_set is not None or args.clear_evaluation_set:
+                    raise ValueError("Evaluation sets apply to pair decisions, not images.")
                 text = args.caption
                 if args.caption_file is not None:
                     text = args.caption_file.read_text(encoding="utf-8")
@@ -624,15 +900,31 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Scanned {count} files", file=sys.stderr, flush=True)
 
         directory, summary = run_scan(config, progress)
+    except KeyboardInterrupt:
+        print(
+            "Cancelled. Completed artifacts and any saved job checkpoints are retained.",
+            file=sys.stderr,
+        )
+        return 130
     except ImportError as exc:
         print(
-            "error: " + failure_text(exc, EventLog(app_home()), action=args.command),
+            "error: "
+            + failure_text(
+                exc,
+                EventLog(app_home(), enabled=not getattr(args, "dryrun", False)),
+                action=args.command,
+            ),
             file=sys.stderr,
         )
         return 2
     except (OSError, ValueError, RuntimeError) as exc:
         print(
-            "error: " + failure_text(exc, EventLog(app_home()), action=args.command),
+            "error: "
+            + failure_text(
+                exc,
+                EventLog(app_home(), enabled=not getattr(args, "dryrun", False)),
+                action=args.command,
+            ),
             file=sys.stderr,
         )
         return 2

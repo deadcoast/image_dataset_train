@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
 from image_dataset_train.exporting import _checked, _json, _path, verify_export
+from image_dataset_train.implementation import validate_implementation_identity
 from image_dataset_train.inventory import file_sha256
 from image_dataset_train.trainer import TRAINER_RELEASE, TRAINER_REPOSITORY, TRAINER_REVISION
 
@@ -32,7 +34,18 @@ def receipt_artifact(directory: Path, name: str) -> bytes:
         or meta.get("status") not in {"completed", "failed"}
     ):
         raise ValueError("Expected a published trainer receipt")
-    return _checked(directory, name, meta["files"][name])
+    if "implementation" in meta:
+        validate_implementation_identity(meta["implementation"])
+    raw = _checked(directory, name, meta["files"][name])
+    if name == "result.json":
+        result = json.loads(raw)
+        if not isinstance(result, dict):
+            raise ValueError("Trainer receipt result must be a JSON object")
+        if "implementation" in result:
+            validate_implementation_identity(result["implementation"])
+        if result.get("implementation") != meta.get("implementation"):
+            raise ValueError("Trainer receipt implementation identity differs from its result")
+    return raw
 
 
 def trainer_status(export: Path, runs: Path, *, expected_export_sha256: str | None = None) -> dict:

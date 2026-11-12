@@ -37,6 +37,7 @@ from image_dataset_train.model_bundle import (
     load_bundle,
 )
 from image_dataset_train.score_cache import ScoreCache, score_checksum
+from image_dataset_train.scored_runs import ScoredRun
 from image_dataset_train.wd_tagger import PREPROCESS_VERSION, WDTagger, prepare_image
 
 
@@ -224,7 +225,11 @@ def tag_inventory(
     inventory_meta, records, inventory_hash = _read_inventory(inventory)
     source = Path(inventory_meta["source"]).resolve(strict=True)
     _separate(source, [config.models, config.scores, config.runs])
-    bundle = load_bundle(bundle_path(config.models, config.tagging.model, config.tagging.revision))
+    bundle = load_bundle(
+        bundle_path(config.models, config.tagging.model, config.tagging.revision),
+        model=config.tagging.model,
+        revision=config.tagging.revision,
+    )
     check_rules(bundle.labels, config.captions)
     tagger = WDTagger(bundle, config.tagging.device)
     if progress:
@@ -329,53 +334,16 @@ def tag_inventory(
 def recaption(config: Config, previous: Path) -> tuple[Path, dict]:
     """Rebuild caption drafts from a self-contained scored run, without loading an ONNX model."""
     clock = RunClock()
-    from image_dataset_train.wd_tagger import validate_scores
-
-    metadata = json.loads((previous / "run.json").read_text(encoding="utf-8"))
-    if metadata.get("stage") not in {"tagging", "recaption"} or metadata.get("schema_version") != 1:
-        raise ValueError("recaption requires a completed tagging or recaption run")
-    if metadata.get("status") not in {"completed", "completed_with_errors"}:
-        raise ValueError("scored run is incomplete")
+    saved = ScoredRun(previous)
+    metadata, labels = saved.metadata, saved.labels
     source = Path(metadata["source"]).resolve()
     _separate(source, [config.runs])
-    for filename, key in (
-        ("manifest.jsonl", "manifest_sha256"),
-        ("labels.json", "labels_sha256"),
-        ("score_index.json", "score_index_sha256"),
-    ):
-        if file_sha256(previous / filename) != metadata.get(key):
-            raise ValueError(f"scored run integrity failure: {filename}")
-    labels = [
-        Label(**row) for row in json.loads((previous / "labels.json").read_text(encoding="utf-8"))
-    ]
     check_rules(labels, config.captions)
-    index = json.loads((previous / "score_index.json").read_text(encoding="utf-8"))
-    vectors = {}
-    for digest, artifact in index.items():
-        expected = f"scores/{digest}.npy"
-        if (
-            len(digest) != 64
-            or any(c not in "0123456789abcdef" for c in digest)
-            or artifact["path"] != expected
-        ):
-            raise ValueError("invalid score artifact path")
-        path = previous / expected
-        if file_sha256(path) != artifact["sha256"]:
-            raise ValueError(f"score artifact hash mismatch: {digest}")
-        vector = np.load(path, allow_pickle=False)
-        validate_scores(vector, len(labels))
-        if score_checksum(vector) != artifact["score_checksum"]:
-            raise ValueError("score vector checksum mismatch")
-        vectors[digest] = vector
-    rows = [
-        json.loads(line)
-        for line in (previous / "manifest.jsonl").read_text(encoding="utf-8").splitlines()
-    ]
+    vectors = {digest: saved.vector(digest) for digest in saved.index}
+    rows = [dict(row) for row in saved.rows]
     for row in rows:
         for field in CAPTION_FIELDS:
             row.pop(field, None)
-        if row["decision"] == "tagged" and row["sha256"] not in vectors:
-            raise ValueError("missing score vector for tagged image")
     metadata = {
         **metadata,
         "stage": "recaption",

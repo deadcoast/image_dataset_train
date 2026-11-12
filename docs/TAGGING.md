@@ -1,24 +1,30 @@
 # Tagging research and implementation
 
 Research checked 2026-10-11. The tagging pipeline was first qualified with project
-version 0.2.0; the package version is now 0.5.1. The evidence in this document is
+version 0.2.0. The evidence in this document is
 milestone-specific: it establishes local execution and preprocessing parity, not
 current anime-collection accuracy, physical CUDA behavior, or training readiness.
 See [COMPLETED.md](COMPLETED.md) for the latest recorded package-level checks and their
 dates. Research references below have not been rechecked in this status update.
 
+Use [saved draft explanations](CAPTION-EXPLANATIONS.md) to inspect an exact image's
+threshold, drop/character policy, subset predicates and literal additions before
+creating a new recaption run. This read-only tool uses the saved rule version and
+score vector; it does not establish tag accuracy or alter any draft or correction.
+
 ## Research decisions
 
 The first backend supports WD v3 ONNX models, with selectable pinned profiles.
-SwinV2 remains the baseline from the notes and is the model actually exercised
-here. EVA02-Large is the next comparison candidate. Bigger or newer does not by
-itself justify replacing every caption.
+SwinV2 remains the baseline. All three selectable profiles now have same-pilot
+CPU runs; the selected pilot comparison and its limited quality evidence are in
+[COMPLETED.md](COMPLETED.md#m3-same-pilot-wd-model-comparison). Bigger or newer
+does not by itself justify replacing every caption.
 
 | Candidate | Publisher evidence | Pipeline decision |
 | --- | --- | --- |
 | WD SwinV2 v3 | Reports macro-F1 0.4541 and P=R threshold 0.2653 for its v2.0 weights. | Implemented and CPU smoke-tested. Retain the demo's 0.35 initial general threshold for continuity. [Model card](https://huggingface.co/SmilingWolf/wd-swinv2-tagger-v3) |
-| WD ViT-Large v3 | Reports macro-F1 0.4674 and P=R threshold 0.2606. | Implemented selectable profile; its weights have not been locally qualified. [Model card](https://huggingface.co/SmilingWolf/wd-vit-large-tagger-v3) |
-| WD EVA02-Large v3 | Reports macro-F1 0.4772 and P=R threshold 0.5296 on the WD v3 benchmark. | Implemented selectable profile; use 0.5296 as an initial general threshold, then calibrate locally. [Model card](https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3) |
+| WD ViT-Large v3 | Reports macro-F1 0.4674 and P=R threshold 0.2606. | Implemented selectable profile; same-pilot CPU execution, throughput, peak process working set and common-threshold comparison are recorded. Broad quality qualification remains open. [Model card](https://huggingface.co/SmilingWolf/wd-vit-large-tagger-v3) |
+| WD EVA02-Large v3 | Reports macro-F1 0.4772 and P=R threshold 0.5296 on the WD v3 benchmark. | Implemented selectable profile; same-pilot CPU comparison is recorded. Use 0.5296 only as an initial threshold pending local calibration. [Model card](https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3) |
 | Camie v2 | Reports 70,527 labels, micro-F1 0.673 at 0.614, and macro-F1 0.506 at 0.492. Its card lists GPL-3.0; WD cards list Apache-2.0. | Research candidate for a separate adapter. Different vocabulary, preprocessing, outputs, and evaluation prevent treating it as a drop-in replacement. [Model card](https://huggingface.co/Camais03/camie-tagger-v2) |
 
 Camie's test distribution and label coverage differ from WD's benchmark. Comparing
@@ -136,6 +142,11 @@ a manual/source caption takes precedence.
 
 ## Provenance, cache, and offline operation
 
+Configured model use now checks the requested model, repository and full revision
+before reuse or inference. Saved-score interpretation checks its recorded rules
+independently. See [model selection and saved rules](MODEL-RULE-CONTRACT.md) for
+compatibility and recovery behavior.
+
 `fetch-model` downloads weights and labels from one full commit hash, records
 their SHA256 values, and executes no repository Python code. Hashes are checked
 before inference. [Hub revision downloads](https://huggingface.co/docs/huggingface_hub/guides/download)
@@ -162,6 +173,13 @@ which does not prove every operator ran on GPU. GPU execution has not been teste
 on physical hardware here. [ONNX Runtime providers](https://onnxruntime.ai/docs/api/python/api_summary.html)
 
 ## Commands
+
+For frozen critical-label judgments, same-population saved-score comparisons and
+calibration/held-out evaluation, see [critical-label evaluation](LABEL-EVALUATION.md).
+The `label-pilot`, `label-refresh`, `label-review` and `tag-evaluate` commands keep
+actual presence separate from predictions and require explicit inclusion of
+assistant diagnostics. Refreshing preserves reviewed identities and attribution
+when corrected groups require a new partition.
 
 ```powershell
 uv sync --locked --extra tag-cpu --cache-dir .cache/uv
@@ -214,9 +232,17 @@ Evidence files are ignored local artifacts:
 `.cache/tagging-smoke/2cdfa67d186b40329528ccb25ddd4478/verification.json`.
 Generated fixtures establish execution, not anime tagging accuracy.
 
-Next, compare SwinV2/EVA02 on the same representative anime pilot with reviewed
-labels. Measure label precision/recall, composition-specific mistakes, and
-speed/memory. Tune thresholds on reviewed examples, then check them on held-out
-images. Camie requires its own adapter and the same evaluation. Alternate WD
-weights, GPU execution, collection-scale behavior, human review acceptance, and
-downstream training quality remain unqualified.
+The selected-pilot comparison is recorded in
+[COMPLETED.md](COMPLETED.md#m3-same-pilot-wd-model-comparison). An exploratory
+threshold fit and held-out check on 24 disagreement-selected assistant-reviewed
+images is also recorded there; it did not justify changing defaults and does not
+qualify representative thresholds. Broader label, composition and caption review,
+and calibration on representative independently reviewed examples remain open.
+The later [50-image assistant review](COMPLETED.md#m3-assistant-pilot-review-and-group-refresh)
+records all 400 judgments and a comparison after correcting a related-image group.
+Its saved model baselines all used `0.35`, including EVA02; it does not compare
+the native profile defaults or establish a new independent validation population.
+Same-pilot CPU throughput and process peak working set are measured. CUDA execution is unqualified because no CUDA
+provider was selected. Camie requires its own adapter and the same evaluation.
+Collection-scale behavior, human review acceptance, and downstream training
+quality remain unqualified.

@@ -14,6 +14,7 @@ from uuid import uuid4
 from image_dataset_train.config import Config
 from image_dataset_train.diagnostics import atomic_json, publish_directory
 from image_dataset_train.exporting import verify_export
+from image_dataset_train.implementation import implementation_identity
 from image_dataset_train.inventory import file_sha256
 
 TRAINER_REPOSITORY = "https://github.com/kohya-ss/sd-scripts.git"
@@ -117,6 +118,7 @@ def setup_trainer(runtime: Path) -> dict:
 
 
 def check_trainer(config: Config, export: Path, runtime: Path) -> tuple[Path, dict]:
+    implementation = implementation_identity()
     export, runtime = export.resolve(strict=True), runtime.resolve(strict=True)
     verify_export(export)
     export_hash = file_sha256(export / "run.json")
@@ -184,6 +186,7 @@ def check_trainer(config: Config, export: Path, runtime: Path) -> tuple[Path, di
                 Path(__file__).with_name("trainer-requirements.txt")
             ),
             "scope": "cpu-dataset-import",
+            "implementation": implementation,
             "training_step_executed": False,
         }
     )
@@ -193,6 +196,7 @@ def check_trainer(config: Config, export: Path, runtime: Path) -> tuple[Path, di
         staging / "run.json",
         {
             "schema_version": 1,
+            "implementation": implementation,
             "stage": "trainer-check",
             "run_id": run_id,
             "status": "completed" if result["qualified"] else "failed",

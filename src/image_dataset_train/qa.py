@@ -47,19 +47,86 @@ def read_qa(run: Path) -> tuple[dict, dict]:
         name: _checked(run, name, meta["files"].get(name))
         for name in ("entries.jsonl", "summary.json", "coverage.json")
     }
-    return meta, {
+    data = {
         "entries": _rows(raw["entries.jsonl"]),
         "summary": json.loads(raw["summary.json"]),
         "coverage": json.loads(raw["coverage.json"]),
     }
+    _verify_pilot_selection(meta, data)
+    return meta, data
+
+
+def _verify_pilot_selection(meta: dict, data: dict) -> None:
+    """Reconcile frozen pilot identities even when the source collection is unavailable."""
+    try:
+        entries, summary = data["entries"], data["summary"]
+        identifiers = summary["pilot_ids"]
+        by_id = {entry["id"]: entry for entry in entries}
+        if (
+            not isinstance(identifiers, list)
+            or any(not isinstance(value, str) for value in identifiers)
+            or len(set(identifiers)) != len(identifiers)
+            or len(by_id) != len(entries)
+            or len({entry["source_path"] for entry in entries}) != len(entries)
+            or any(
+                entry["id"] != _rank(0, entry["source_path"] + "\0" + entry["sha256"])
+                or type(entry["pilot"]) is not bool
+                or entry["pilot"] != (entry["id"] in identifiers)
+                for entry in entries
+            )
+            or any(identifier not in by_id for identifier in identifiers)
+            or summary["pilot_images"] != len(identifiers)
+            or any(by_id[identifier]["decision"] == "exclude" for identifier in identifiers)
+        ):
+            raise ValueError("QA pilot identities or membership are inconsistent")
+        selection = summary.get("pilot_selection")
+        if selection is None and "pilot_selection" not in meta:
+            return  # Historical reports predate explicit selection provenance.
+        if (
+            not isinstance(selection, dict)
+            or selection != meta.get("pilot_selection")
+            or selection.get("method") not in {"coverage-v1", "explicit_source_paths"}
+            or not isinstance(selection.get("reason"), str)
+            or not selection["reason"].strip()
+            or selection.get("source_paths")
+            != [by_id[identifier]["source_path"] for identifier in identifiers]
+        ):
+            raise ValueError("QA pilot selection provenance is inconsistent")
+        if selection["method"] == "explicit_source_paths":
+            if not identifiers or summary["requested_pilot_images"] != len(identifiers):
+                raise ValueError("Explicit QA pilot selection must retain every selected image")
+        elif identifiers != select_pilot(
+            entries, summary["requested_pilot_images"], summary["seed"]
+        ):
+            raise ValueError("QA pilot differs from the recorded coverage selection")
+    except (KeyError, TypeError) as exc:
+        raise ValueError("Invalid QA pilot selection metadata") from exc
 
 
 def render_qa(data: dict) -> str:
     template = Path(__file__).with_name("qa_report.html").read_text(encoding="utf-8")
     script = "\n".join(
         Path(__file__).with_name(name).read_text(encoding="utf-8")
-        for name in ("qa_report.js", "qa_content.js", "qa_workflow.js", "qa_training.js")
+        for name in (
+            "qa_preferences.js",
+            "qa_report.js",
+            "qa_content.js",
+            "qa_workflow.js",
+            "qa_training.js",
+        )
     )
+    if "browsing" not in data:
+        # Static reports have no live session identity or application preference store.
+        # Content identity isolates browser-local preferences from another snapshot.
+        identity = hashlib.sha256(
+            json.dumps(
+                {name: data[name] for name in ("summary", "entries", "coverage")},
+                sort_keys=True,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        data = {**data, "browsing": {"report_id": identity, "state": None, "error": None}}
     payload = json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
     return template.replace("__QA_SCRIPT__", script).replace("__QA_DATA__", payload)
 
@@ -147,7 +214,25 @@ def create_qa(
     sample_size: int = 50,
     seed: int = 20261011,
     config_path: Path = Path("config.toml"),
+    pilot_source_paths: list[str] | None = None,
+    selection_reason: str | None = None,
 ) -> tuple[Path, dict]:
+    if pilot_source_paths is not None:
+        if (
+            not isinstance(pilot_source_paths, list)
+            or not pilot_source_paths
+            or any(not isinstance(path, str) or not path for path in pilot_source_paths)
+            or len(set(pilot_source_paths)) != len(pilot_source_paths)
+        ):
+            raise ValueError(
+                "Explicit pilot source paths must be a nonempty list without duplicates"
+            )
+        if not isinstance(selection_reason, str) or not selection_reason.strip():
+            raise ValueError("Explicit pilot selection requires a reason")
+        pilot_source_paths = list(pilot_source_paths)
+        selection_reason = selection_reason.strip()
+    elif selection_reason is not None:
+        raise ValueError("A selection reason requires explicit pilot source paths")
     clock = RunClock()
     run = run.resolve(strict=True)
     metadata = _published(run, {"groups", "export"})
@@ -178,6 +263,13 @@ def create_qa(
         drafts, draft_meta = _drafts(captions_run, group_meta)
     if sample_size < 1:
         raise ValueError("Pilot size must be positive")
+    if pilot_source_paths is not None:
+        by_path = {member["source_path"]: member for member in members}
+        for path in pilot_source_paths:
+            if path not in by_path:
+                raise ValueError(f"Explicit pilot image is absent from the input snapshot: {path}")
+            if by_path[path]["review_decision"] == "exclude":
+                raise ValueError(f"Explicit pilot image is excluded: {path}")
     source = Path(group_meta["source"])
     root = config.runs.resolve()
     if root.is_relative_to(source.resolve()) or source.resolve().is_relative_to(root):
@@ -327,7 +419,23 @@ def create_qa(
         if entry["group_id"] in balance["mixed_subset_groups"]:
             entry["findings"].append("coverage_mixed_subset")
         entry["findings"] = sorted(set(entry["findings"]))
-    pilot = select_pilot(entries, sample_size, seed)
+    if pilot_source_paths is None:
+        pilot = select_pilot(entries, sample_size, seed)
+        by_id = {entry["id"]: entry for entry in entries}
+        selection = {
+            "method": "coverage-v1",
+            "source_paths": [by_id[identifier]["source_path"] for identifier in pilot],
+            "reason": "Coverage of review findings, annotations, geometry, and seeded variety",
+        }
+    else:
+        by_path = {entry["source_path"]: entry for entry in entries}
+        pilot = [by_path[path]["id"] for path in pilot_source_paths]
+        sample_size = len(pilot)
+        selection = {
+            "method": "explicit_source_paths",
+            "source_paths": pilot_source_paths,
+            "reason": selection_reason,
+        }
     for entry in entries:
         entry["pilot"] = entry["id"] in pilot
     findings = Counter(code for entry in entries for code in entry["findings"])
@@ -349,6 +457,7 @@ def create_qa(
         "review_revision": group_meta["review_revision"],
         "seed": seed,
         "pilot_ids": pilot,
+        "pilot_selection": selection,
         "human_accepted": False,
         "reconciliation": reconcile_counts(
             groups,
@@ -406,6 +515,7 @@ def create_qa(
             "similarity_run": group_meta["similarity_run"],
             "caption_run": str(captions_run.resolve()) if captions_run else None,
             "publication_caption_run": metadata.get("caption_run") if exported else None,
+            "pilot_selection": selection,
             "caption_manifest_sha256": draft_meta["manifest_sha256"] if draft_meta else None,
             "created_at": datetime.now(UTC).isoformat(),
             "started_at": clock.started_at,
@@ -438,8 +548,8 @@ def list_qa(
     if offset < 0 or limit < 1:
         raise ValueError("QA offset must be nonnegative and limit must be positive")
     run = run.resolve(strict=True)
-    meta = _published(run, {"qa"})
-    entries = _rows(_checked(run, "entries.jsonl", meta["files"].get("entries.jsonl")))
+    _, data = read_qa(run)
+    entries = data["entries"]
     if label is not None:
         label = annotation_name(label)
     if subset is not None:

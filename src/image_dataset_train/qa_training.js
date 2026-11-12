@@ -64,8 +64,9 @@ async function loadTraining() {
     text("exportCounts", result.verification ? `${result.verification.images} images · ${result.verification.groups} groups` : result.error);
     text("trainingOutcome", label);
     const pilot = result.pilot_assessment;
-    text("trainingPilot", pilot.conclusion?.verdict?.replaceAll("_", " ") || "No conclusion recorded");
-    text("trainingPilotProgress", `${pilot.assessed_images} of ${pilot.pilot_images} images assessed. Applies to this QA snapshot only.`);
+    text("trainingPilot", pilot.conclusion ? `${pilot.conclusion.verdict.replaceAll("_", " ")} · ${assessmentKind(pilot.conclusion)}` : "No conclusion recorded");
+    const kinds = pilot.reviewer_kinds || {};
+    text("trainingPilotProgress", `${pilot.assessed_images} of ${pilot.pilot_images} images assessed · ${kinds.human || 0} human / ${kinds.assistant || 0} assistant / ${kinds.unknown || 0} unknown. ${pilot.human_accepted ? "Human acceptance recorded." : "Human acceptance not established."} Applies to this QA snapshot only.`);
     text("trainingExport", result.export);
     text("trainingExportHash", result.export_run_sha256 || "Not verified");
     text("trainingPin", `${result.pin.release} · ${result.pin.revision}`);

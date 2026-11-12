@@ -11,7 +11,7 @@ import numpy as np
 
 from image_dataset_train.config import CaptionConfig
 from image_dataset_train.model_bundle import Label
-from image_dataset_train.wd_tagger import validate_scores
+from image_dataset_train.score_validation import validate_scores
 
 # Preserve underscores in emoticons; all other conversion is only for rendered text.
 KAOMOJI = {
@@ -106,14 +106,46 @@ def _composition(names: set[str], flags: list[str]) -> str:
     return "single_subject" if sum(counts) == 1 or "solo" in names else "unknown"
 
 
-def _subset_proposal(names: set[str], rules: CaptionConfig, flags: list[str]) -> dict:
+def _subset_proposal(
+    names: set[str], rules: CaptionConfig, flags: list[str], trace: dict | None = None
+) -> dict:
     matches, missing = [], {}
     for rule in rules.subset_rules:
-        if (
-            set(rule.all_tags) <= names
-            and (not rule.any_tags or set(rule.any_tags) & names)
-            and not set(rule.none_tags) & names
-        ):
+        all_match = set(rule.all_tags) <= names
+        any_match = not rule.any_tags or bool(set(rule.any_tags) & names)
+        none_match = not set(rule.none_tags) & names
+        matched = bool(all_match and any_match and none_match)
+        if trace is not None:
+            trace["subset_rules"].append(
+                {
+                    "name": rule.name,
+                    "matched": matched,
+                    "all_tags": {
+                        "required": rule.all_tags,
+                        "present": sorted(set(rule.all_tags) & names),
+                        "missing": sorted(set(rule.all_tags) - names),
+                        "passed": all_match,
+                    },
+                    "any_tags": {
+                        "required": rule.any_tags,
+                        "present": sorted(set(rule.any_tags) & names),
+                        "missing": sorted(set(rule.any_tags) - names),
+                        "passed": any_match,
+                    },
+                    "none_tags": {
+                        "forbidden": rule.none_tags,
+                        "present": sorted(set(rule.none_tags) & names),
+                        "passed": none_match,
+                    },
+                    "expect_tags": {
+                        "expected": rule.expect_tags,
+                        "present": sorted(set(rule.expect_tags) & names),
+                        "missing": sorted(set(rule.expect_tags) - names),
+                        "applies": matched,
+                    },
+                }
+            )
+        if matched:
             matches.append(rule.name)
             absent = sorted(set(rule.expect_tags) - names)
             if absent:
@@ -130,15 +162,38 @@ def _subset_proposal(names: set[str], rules: CaptionConfig, flags: list[str]) ->
 
 
 def caption_record(
-    labels: list[Label], scores: np.ndarray, rules: CaptionConfig, default_threshold: float
+    labels: list[Label],
+    scores: np.ndarray,
+    rules: CaptionConfig,
+    default_threshold: float,
+    *,
+    trace: dict | None = None,
 ) -> dict:
+    """Render one caption; optional derived trace follows these same decisions."""
     validate_scores(scores, len(labels))
+    if trace is not None:
+        trace.clear()
+        trace.update(tags=[], subset_rules=[], phrases=[])
     threshold = default_threshold if rules.general_threshold is None else rules.general_threshold
     selected, observed, uncertain, ratings = [], [], [], {}
     for label in labels:
         score = float(scores[label.index])
         if label.category == 9:
             ratings[label.name] = score
+            if trace is not None:
+                trace["tags"].append(
+                    {
+                        **asdict(label),
+                        "score": score,
+                        "threshold": None,
+                        "threshold_source": None,
+                        "observed": False,
+                        "selected": False,
+                        "near_threshold": False,
+                        "reasons": ["rating_only"],
+                        "phrase_status": "rating_only",
+                    }
+                )
             continue
         cutoff = rules.tag_thresholds.get(
             label.name, rules.character_threshold if label.category == 4 else threshold
@@ -151,23 +206,73 @@ def caption_record(
                 selected.append(item)
         if rules.uncertainty_margin and abs(score - cutoff) <= rules.uncertainty_margin:
             uncertain.append(item)
+        if trace is not None:
+            reasons = []
+            if score <= cutoff:
+                reasons.append("below_or_equal_threshold")
+            if label.name in rules.drop_tags:
+                reasons.append("explicit_drop")
+            if label.category == 4 and not rules.keep_characters:
+                reasons.append("characters_disabled")
+            trace["tags"].append(
+                {
+                    **item,
+                    "threshold_source": (
+                        "tag_override"
+                        if label.name in rules.tag_thresholds
+                        else "character_threshold"
+                        if label.category == 4
+                        else "general_threshold"
+                        if rules.general_threshold is not None
+                        else "default_general_threshold"
+                    ),
+                    "observed": score > cutoff,
+                    "selected": not reasons,
+                    "near_threshold": bool(
+                        rules.uncertainty_margin and abs(score - cutoff) <= rules.uncertainty_margin
+                    ),
+                    "reasons": reasons or ["selected"],
+                    "phrase_status": "not_selected" if reasons else "emitted",
+                }
+            )
     selected.sort(key=lambda item: (-item["score"], item["index"]))
     observed.sort(key=lambda item: (-item["score"], item["index"]))
     names = {item["name"] for item in observed}
     flags = []
     composition = _composition(names, flags)
-    proposal = _subset_proposal(names, rules, flags)
+    proposal = _subset_proposal(names, rules, flags, trace)
     if not selected:
         flags.append("no_scored_caption_tags")
     if uncertain:
         flags.append("near_threshold_tags")
     rendered, seen = [], set()
     phrases = (
-        ([rules.trigger] if rules.trigger else [])
-        + [display_name(item["name"]) for item in selected]
-        + rules.force_tags
+        ([{"kind": "trigger", "text": rules.trigger}] if rules.trigger else [])
+        + [
+            {"kind": "tag", "name": item["name"], "text": display_name(item["name"])}
+            for item in selected
+        ]
+        + [{"kind": "forced", "text": name} for name in rules.force_tags]
     )
-    for name in phrases:
+    first_phrases = {}
+    traced_tags = {item["name"]: item for item in trace["tags"]} if trace is not None else {}
+    for index, phrase in enumerate(phrases):
+        name = phrase["text"]
+        duplicate = name.casefold() in seen
+        if trace is not None:
+            trace["phrases"].append(
+                {
+                    **phrase,
+                    "position": index,
+                    "status": "duplicate_phrase" if duplicate else "emitted",
+                    "duplicate_of": first_phrases.get(name.casefold()),
+                }
+            )
+            if phrase["kind"] == "tag":
+                traced_tags[phrase["name"]]["phrase_status"] = (
+                    "duplicate_phrase" if duplicate else "emitted"
+                )
+        first_phrases.setdefault(name.casefold(), index)
         if name.casefold() not in seen:
             rendered.append(name)
             seen.add(name.casefold())

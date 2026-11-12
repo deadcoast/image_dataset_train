@@ -24,6 +24,100 @@ installed or released 0.5.1 build.
 
 ## Scope and authority
 
+### Current-source reconciliation — 2026-11-12
+
+The user explicitly requested a comprehensive comparison of TODO/SHELVED with
+current source. This is an **in-cycle reconciliation**, not closure or replacement
+of `dataset-preparation-2026-10-11`. The original 0.5.1 review below remains dated
+history. That reconciliation inspected the **0.17.0** working tree, Git HEAD
+`c6de8c1fc60681d870985cf4e04057cb0a8854cb`, with existing uncommitted work and runtime
+payload `73de3c746b8f06d06d5f29bd62bc9b20eff37fd58d27641ab1fd3932c1d720f1`.
+
+[The source review](SOURCE-REVIEW-2026-11-12.md) reconciles every existing finding,
+records source locations and generated-fixture observations, and separates
+confirmed gaps from proposals and unmeasured performance. It adds these distinct
+findings; previously delivered features retain their completion evidence:
+
+- <a id="cf21"></a>**CF21 — consistent persisted judgment validation** (P1, M4
+  source support). Assessment reads can accept current attribution that disagrees
+  with retained history, ordinary review saves can append to a state rejected by
+  history inspection, and label history has incomplete event validation. Share
+  strict validation at each store's read/write boundary, replay attributable
+  events, preserve legacy unknown attribution and reject inconsistencies without
+  rewriting evidence. This is demonstrated with deliberately altered generated
+  fixtures, not a finding that actual human acceptance was forged.
+- <a id="cf22"></a>**CF22 — coherent artifact metadata identity** (P1, M5 source
+  support). Catalog reads can return parsed metadata with a digest of different
+  bytes; trainer status can return a passed receipt after export metadata changes
+  during its check. Bind parsed data, verification and reported identity to one
+  checked snapshot and reject detected changes. Preserve offline browsing and
+  historical receipt identity. This is a narrow correction, not a prerequisite
+  for the whole SC02 reader-layer refactor.
+- <a id="cf23"></a>**CF23 — label save eligibility across input methods** (P1,
+  M3 review-input support for M4). The label keyboard handler can emit a save while
+  the button is disabled for a pending image or an empty filter. Use the same
+  current-selection, visible-membership, preview-ready and busy checks for form,
+  click and keyboard actions. Keep unsaved input recoverable and ignore stale
+  preview events. Do not treat browser preview state as proof of human review or
+  remove legitimate programmatic assistant judgments.
+- <a id="cf24"></a>**CF24 — bind requested model to loaded bundle** (P1, M3
+  source support). A self-consistent bundle in the wrong configured model slot
+  passes the generic loader while caption defaults come from the requested model.
+  Validate the expected model/repository/revision at configured inference and
+  recovery boundaries before inference or cache use. Generic artifact inspection
+  may remain model-agnostic. A generated bundle probe establishes the missing
+  contract, not an observed mismatch in the selected collection.
+- <a id="qol21"></a>**QOL21 — publication reconnect and response ordering**
+  (P2, M4 operational support). Publication refresh becomes disabled with its
+  fieldset after a failed load, while a polling error instructs the user to use
+  it; an older response can replace newer readiness/job state. Keep reconnect
+  reachable independently of mutation controls and fence load/poll/submit
+  responses. Preserve publication receipts, settings and exact revision guards.
+  This extends the publication panel; it does not revoke QOL08's delivered
+  correction/pair recovery scope.
+- <a id="tm21"></a>**TM21 — bounded catalog query work** (P2, M5 proposal).
+  A one-row catalog query still validates and fetches all SQLite records before
+  applying its limit. Measure cold/warm verification and query costs, then design
+  a verification/index lifetime tied to exact artifact identity. Keep full audit
+  available and never silently weaken metadata integrity for pagination. Current
+  control flow is confirmed; larger-scale cost is unmeasured.
+- <a id="dp03"></a>**DP03 — actionable preparation readiness preview** (P2,
+  M1 operational proposal). Extend the existing read-only preparation preview
+  with pinned model readiness, destination constraints, existing-caption blockers
+  and measured/estimated/unknown storage information. Supply exact next commands
+  before expensive stages where checks permit. Preview must not fetch, repair,
+  infer, create a job or alter registrations. A readiness report cannot guarantee
+  later filesystem availability or replace execution-time source verification.
+
+Use the [PLAN reconciliation](PLAN.md#source-reconciliation-and-next-batch) to
+route these and the refined existing findings through [SHELVED](SHELVED.md).
+The reconciliation promoted **CF21/CF23**; they are now delivered in
+[0.18.0](COMPLETED.md#review-integrity-0180), with exact runtime and verification
+evidence. **CF24 + bounded SC06** are now delivered in
+[0.19.0](COMPLETED.md#model-rule-contract-0190); broader SC06 schema work remains
+queued. **CF22** is the next scheduled TODO batch. Original source findings above
+remain the dated rationale, not an assertion that completed CF21/CF23/CF24 or
+bounded saved-rule gaps remain in the current source.
+M4 human acceptance and its M5/M6 dependencies remain open and separately attributed.
+
+### User-directed product findings — 2026-11-09 addendum
+
+This is an addition to the active cycle following the user's explicit product
+direction, not a replacement IDENTIFIED review or a claim that PLAN is complete.
+
+- <a id="dp01"></a>**DP01 — cohesive preparation and continuation.** Existing
+  stages require users to pass run directories manually. A directory command needs
+  frozen settings, attributed automatic decisions, durable attempt/output records,
+  checked resume and useful recovery/status across the complete pipeline.
+- <a id="dp02"></a>**DP02 — portable ingest database.** Current immutable exports
+  contain image/caption pairs and rich JSONL provenance but no indexed, queryable
+  metadata database or split-local ImageFolder metadata. Add these at publication
+  time so they travel and verify with the existing media, preserving source,
+  derivative, model prediction and reviewed-annotation distinctions.
+
+Route these findings through the authorized [PLAN addendum](PLAN.md#directory-preparation-product-phase--authorized-2026-11-09),
+[SHELVED](SHELVED.md#authorized-directory-preparation-delivery) and active TODO.
+
 The governing design is [PLAN.md](PLAN.md), especially its work order and
 completion boundaries. [TODO.md](../TODO.md) tracks unfinished work;
 [COMPLETED.md](COMPLETED.md) records implementation and evidence;

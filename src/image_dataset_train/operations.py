@@ -128,11 +128,11 @@ def _removal_inventory(source: Path, progress: Progress) -> list[Record]:
             _safe_path(source, row.source_path)
             if not path.is_file():
                 raise ValueError("Not a regular file.")
-            if kind == "sidecar":
-                before = _signature(path)
-                row.sha256 = file_sha256(path)
-                if before != _signature(path):
-                    raise ValueError("Caption changed during inspection.")
+            # Recovery must bind captions to the exact image bytes, without decoding them.
+            before = _signature(path)
+            row.sha256 = file_sha256(path)
+            if before != _signature(path):
+                raise ValueError("Image or caption changed during inspection.")
         except (OSError, ValueError) as exc:
             row.decision, row.error = "error", str(exc)
         if len(records) % 50 == 0:
@@ -294,7 +294,13 @@ def _remove_caption(source: Path, item: Item, result: Result) -> None:
         os.fsync(copy.fileno())
     if file_sha256(backup) != item.caption_sha256:
         raise ValueError("Backup verification failed; original kept.")
-    event = {"image": item.image, "caption": item.caption, "sha256": item.caption_sha256}
+    event = {
+        "image": item.image,
+        "image_sha256": item.image_sha256,
+        "caption": item.caption,
+        "sha256": item.caption_sha256,
+        "source": str(source),
+    }
     _journal(result.report, {**event, "event": "backup_verified"})
     _recheck_pair(source, item, removing=True)
     if _signature(target) != before or file_sha256(target) != item.caption_sha256:
@@ -321,6 +327,16 @@ def _save_result(result: Result, status: str) -> None:
             "backup": str(result.backup) if result.backup else None,
             "repairs": result.repairs.records() if result.repairs else [],
             "updated_at": datetime.now(UTC).isoformat(),
+            **(
+                {
+                    "plan_sha256": file_sha256(result.report / "plan.json"),
+                    "journal_sha256": file_sha256(result.report / "journal.jsonl")
+                    if (result.report / "journal.jsonl").exists()
+                    else None,
+                }
+                if result.action == "remove"
+                else {}
+            ),
         },
     )
 

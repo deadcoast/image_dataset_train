@@ -1,7 +1,102 @@
 # Trainime
 
-Prepare local anime images for training: inventory, validation, deduplication,
-tagging, caption review, and reproducible image/sidecar exports.
+Point at an image directory and prepare a portable training dataset with captions,
+indexed metadata, train/validation splits and a local QA report. Source images and
+existing captions stay unchanged.
+
+```powershell
+dataset prepare 'D:\images\collection' --workspace 'D:\datasets\collection'
+```
+
+The command inspects the collection, reuses or downloads the pinned local tagger,
+preserves saved caption corrections, resolves technical eligibility and publishes
+verified image/caption pairs. The default WD tagger is intended for anime-style
+images. To prepare a collection using its existing captions without downloading
+or running a model, add `--captions existing --offline`.
+
+The result prints the export, SQLite catalog and QA report locations. Each nonempty
+split also contains ImageFolder-compatible `metadata.jsonl`; the complete export
+can move to another computer without its original source directory.
+
+```powershell
+dataset prepare 'D:\images\collection' --workspace 'D:\datasets\collection' --dryrun
+dataset status 'D:\datasets\collection' --verify
+dataset resume 'D:\datasets\collection'
+```
+
+Preview reads the images without writes, downloads or inference. Resume checks
+saved stage inputs and outputs before reusing them. Saved review changes use
+`resume --refresh-reviews`; changed source files or settings use a new `prepare
+... --new` job. Earlier attempts and outputs remain available. Commands work
+outside this checkout without a `config.toml`.
+
+Automatic exclusions and conservative similarity split constraints carry their
+policy reasons. They preserve every source file and remain separate from semantic
+label judgments and human acceptance. Review conflicts produce a report and a
+specific continuation command. See [directory preparation](docs/PREPARATION.md),
+[catalog queries](docs/DATASET-CATALOG.md) and [recovery](docs/RECOVERY.md).
+
+Preparation remembers the workspace in a local collection list. Find it later or
+give an older workspace a convenient name:
+
+```powershell
+dataset collections
+dataset collections add 'D:\datasets\collection' --name artwork
+dataset status --collection artwork --verify
+dataset runs --collection artwork --stage qa
+```
+
+The list only contains registered workspaces. Run records show their source,
+stage and identity with commands for the selected report. Recovery status retains
+failed and superseded attempts; generated resume commands name the expected job.
+See [collection navigation](docs/COLLECTIONS.md).
+
+To find retained caption backups and repair history:
+
+```powershell
+dataset recovery --source 'D:\images\collection'
+dataset recovery show <full-receipt-id>
+```
+
+The [recovery browser](docs/RECOVERY-BROWSER.md) shows affected paths and exact
+continuation commands. Listing works with source images offline and keeps saved
+history separate from current integrity. Caption restore checks the selected
+receipt before writing; collision retry retains its existing source-wide scope.
+
+## Review and compare prepared datasets
+
+Freeze representative membership before judging model labels, preserve assistant
+or human attribution, and inspect effective captions against their exported images.
+The [label reviewer](docs/LABEL-EVALUATION.md) supports a reproducible probability
+sample of all source content, including images excluded from training. The
+[QA reviewer](docs/QA.md) records caption judgments separately from model predictions.
+Its [caption comparison](docs/CAPTION-COMPARISON.md) shows the saved override,
+sidecar and pinned draft together, with the effective keep/replace/clear outcome
+before a correction is saved.
+Use [draft rule explanations](docs/CAPTION-EXPLANATIONS.md) to see why a tag was
+selected or omitted, inspect subset predicates and trace forced phrases from saved
+scores without rerunning inference.
+The [recovery controls](docs/REVIEWER-RECOVERY.md) explain empty queues and retry
+unavailable previews or saved form reads while preserving unrelated unsaved work.
+[Saved browsing](docs/REVIEW-PREFERENCES.md) restores image filters and image/pair
+positions when you reopen the same report, and keeps named filter views.
+[Judgment integrity](docs/REVIEW-INTEGRITY.md) keeps persisted state, history and
+attribution consistent. Label shortcuts obey the same eligibility checks as Save;
+unavailable images can be retried without losing edits.
+[Model selection and saved rules](docs/MODEL-RULE-CONTRACT.md) bind configured
+inference to the requested bundle and interpret saved scores using their checked
+recorded thresholds, with explicit mismatch and historical-evidence recovery.
+
+After saving corrections and publishing an updated export, compare the exact inputs:
+
+```powershell
+dataset snapshot-compare --before 'D:\datasets\old-export' --after 'D:\datasets\new-export'
+```
+
+The verified report shows caption edits, membership, grouping and split changes.
+See [snapshot comparison](docs/SNAPSHOT-COMPARISON.md) to retain a portable receipt.
+
+## Source-side caption actions
 
 **`trainime` is the directory-action workflow.** It tags missing source sidecars
 or backs up and removes paired captions. The menu is:
@@ -123,12 +218,19 @@ Group-aware training exports and independent snapshot verification are implement
 
 | Command | Purpose | Output and source effects |
 | --- | --- | --- |
+| `dataset prepare <directory>` | Prepare an image directory with useful defaults. | Preserves sources; publishes attributed preparation decisions, verified training pairs, a portable catalog and QA in a durable workspace. |
+| `dataset status <workspace>`, `dataset resume <workspace>` | Inspect or continue a preparation job. | `--verify` checks completed artifacts; `--verify-cache` loads the local model to check reusable scores without inference. Resume checks source identity and reuses verified stages. |
+| `dataset catalog-info`, `dataset catalog-query` | Inspect and filter portable training metadata. | Reads checked catalog/metadata/provenance without requiring the original images. Full media checks remain `verify-export`. |
 | `trainime tag <directory>` | Interactive or direct directory tagging. | Writes only missing `.txt` sidecars beside source images; existing captions are kept. Uses app data under `%LOCALAPPDATA%\trainime` on Windows. |
 | `trainime remove <directory>` | Remove paired captions after backup. | Backs up and removes source `.txt` sidecars; images and unrelated files remain. |
+| `dataset restore-captions --receipt <removal-report>` | Recover backed-up source captions. | Restores verified missing captions without overwriting newer files; preserves conflicts and records the attempt. Supports read-only preview. |
 | `dataset scan` | Technical intake inventory. | Read-only; publishes an inventory under the configured `paths.runs`. |
-| `dataset similarity --inventory <inventory-run>` | Find visually similar pair candidates. | Read-only; publishes `images.jsonl` and unreviewed `pairs.jsonl` under `paths.runs`. Pairs require human review and do not remove or group images. |
+| `dataset similarity --inventory <inventory-run>` | Find visually similar pair candidates. | Read-only; publishes `images.jsonl` and unreviewed `pairs.jsonl` under `paths.runs`. Pairs require explicit review and do not remove or group images. |
 | `dataset similarity-evaluate --run <similarity-run>` | Measure thresholds against saved related/distinct judgments. | Writes an evaluation and replayable pair evidence under `paths.runs`; reads saved hashes without changing sources, reviews, or the proposal radius. |
 | `dataset review --run <similarity-run>` | List pairs; use `--images` to list images. Save decisions with `--pair`, `--link`, or `--image`. | Reads by default. Edits persist under `paths.reviews`, bound to source paths and hashes; source images and captions remain unchanged. |
+| `dataset review-history list\|show\|restore --collection <name>` | Inspect earlier image/pair edits and preview restoring a selected revision. | [Restore](docs/REVIEW-HISTORY.md) requires explicit apply with matching preview/revision guards; it appends history and leaves sources, exports and acceptance intact. |
+| `dataset review-history changes --collection <name>` | Explain saved image/pair changes since the selected report. | [Snapshot changes](docs/REVIEW-CHANGES.md) validates captured history, separates net changes from history-only advancement and provides publication navigation without writing. |
+| `dataset review-batch --collection <name> --images-file <selection.json> ...` | Preview explicit label, subset or inclusion changes for every selected image. | [Bulk review](docs/BULK-REVIEW.md) applies one guarded atomic batch with actor/reason and per-image history; it preserves captions and published artifacts. |
 | `dataset groups --run <similarity-run>` | Publish the current related-image groups and review state. | Writes a new snapshot under `paths.runs`, retaining every eligible occurrence and its decisions. Does not split, copy, or export images. |
 | `dataset export --groups <groups-run>` | Split whole groups and select reviewed captions. | Copies included images and captions to a new verified snapshot under `paths.exports`; preserves source files. Optional `--captions <tagging-run>` supplies missing drafts. |
 | `dataset verify-export --run <export-run>` | Recheck a published export. | Read-only; verifies pairs, hashes, membership, and split consistency without the source collection. |
@@ -136,13 +238,15 @@ Group-aware training exports and independent snapshot verification are implement
 | `dataset qa-list --run <qa-run>` | Filter and page through QA findings in the terminal. | Reads the saved report and prints commands for the matching review records. |
 | `dataset review-ui --run <qa-run>` | Review images and related pairs, assess the pilot, and publish from a local browser. | Saves decisions and judgments under `paths.reviews`; publishes new groups/QA under `paths.runs` and verified exports under `paths.exports`; preserves source files. |
 | `dataset assessment --run <qa-run>` | Inspect recorded pilot results. | Reads progress, critical-label errors, reviewer notes, and the explicit pilot conclusion. |
+| `dataset label-pilot`, `label-ui`, `label-review`, `label-refresh`, `tag-evaluate` | Review critical labels and compare models. | Supports explicit frozen membership, image-first atomic judgments and optional model comparison; retains reviewer attribution, exposure history and group-disjoint evaluation. See [label evaluation](docs/LABEL-EVALUATION.md). |
 | `dataset trainer-setup` | Prepare the pinned CPU dataset-loader runtime. | Downloads into `.cache/trainer`; keeps tagging dependencies separate. |
 | `dataset trainer-check --run <export-run>` | Import pairs with the pinned sd-scripts loader. | Writes a qualification receipt under `paths.runs`; checks captions, repeats, buckets, and CPU tensors without model training. |
 | `dataset trainer-status --run <export-run>` | Inspect the current import result and receipt history. | Reads export-bound receipts under `paths.runs`; the reviewer's Training import tab shows the same evidence and loader logs. |
 | `dataset tag --inventory <inventory-run>` | Local WD inference. | Writes score vectors and caption drafts to a new run under `paths.runs`; source images and captions are not changed. |
 | `dataset recaption --run <tagging-run>` | Reapply caption rules to saved scores. | Writes a new draft run; does not load the model or infer again. |
 
-The technical preparation path is:
+`dataset prepare` composes the technical stages below with an explicit automatic
+preparation policy. Individual commands retain the stricter reviewed-export path:
 
 ```text
 source images + existing captions
@@ -165,7 +269,9 @@ rule. It applies a documented orientation, white-padding, grayscale, and resize
 policy and records a stable pair ID, both source hashes, hash version, Pillow
 version, and inventory hash. Each source is rechecked against its inventory hash
 when read; stop external writers to the collection while a stage runs. Review the
-image pairs before making any grouping or exclusion decision.
+image pairs before recording semantic grouping or near-duplicate exclusion decisions.
+Automatic preparation can keep unresolved candidates in the same split without
+asserting that they depict the same content.
 Similarity and tagging each consume the inventory; neither consumes the other's
 output. Exact-byte aliases remain in that inventory and are skipped during pHash
 proposal generation. Reports and CLI summaries distinguish these aliases from
@@ -177,7 +283,7 @@ balances these annotations across whole groups and reports rare/missing categori
 `--split-strategy size` retains image-count-only allocation.
 Use [pilot QA](docs/QA.md) to navigate captions, annotations, groups, and split
 coverage in a local browser report or the terminal before and after export.
-Grouping joins exact-byte aliases and human-confirmed related pairs; it never
+Grouping joins exact-byte aliases and review-confirmed related pairs; it never
 selects a keeper or deletes a variant. [Export](docs/EXPORT.md) applies manual
 overrides, then source captions, then optional model drafts. It copies included
 images into whole-group splits and writes separate Kohya configurations.
@@ -276,5 +382,8 @@ uv build --cache-dir .cache/uv
 
 Tests use generated fixtures and small ONNX graphs; no pretrained model or GPU
 is needed for the automated suite. Intake does not require tagging extras.
-Large datasets, real-image QA, model accuracy, and trainer compatibility remain
-unqualified. A real pinned SwinV2 CPU smoke run is documented in the tagging guide.
+The selected collection has representative assistant image/caption review and a
+355-pair pinned CPU trainer import, recorded in
+[the completion log](docs/COMPLETED.md#representative-assistant-review-070).
+Larger collections, general model accuracy, human dataset acceptance and other
+trainer targets remain outside that qualification.

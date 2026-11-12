@@ -10,3 +10,5 @@ build/
 data/
 models/
 .env
+
+pilot-dir/

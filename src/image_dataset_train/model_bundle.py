@@ -79,13 +79,40 @@ def atomic_json(path: Path, value: object) -> None:
     os.replace(temporary, path)
 
 
-def bundle_path(root: Path, model: str, revision: str | None = None) -> Path:
+def _selection(model: str, revision: str | None) -> tuple[ModelSpec, str]:
     if not isinstance(model, str) or model not in MODELS:
         raise ValueError(f"unknown WD model: {model}")
-    revision = MODELS[model].revision if revision is None else revision
+    spec = MODELS[model]
+    revision = spec.revision if revision is None else revision
     if not isinstance(revision, str) or not re.fullmatch(r"[a-f0-9]{40}", revision):
         raise ValueError("model revision must be a full 40-character commit hash")
+    return spec, revision
+
+
+def bundle_path(root: Path, model: str, revision: str | None = None) -> Path:
+    _, revision = _selection(model, revision)
     return root / model / revision
+
+
+def check_model_binding(metadata: dict, model: str, revision: str | None = None) -> None:
+    """Bind declared artifact identity to a request without opening a live bundle.
+
+    Historical preparation checkpoints retain these fields and can be checked
+    while the local model is unavailable. This does not replace file/hash checks
+    when loading a live bundle or verify the publisher's authenticity.
+    """
+    spec, revision = _selection(model, revision)
+    expected = {"model": model, "repo": spec.repo, "revision": revision}
+    mismatched = [
+        name
+        for name, value in expected.items()
+        if not isinstance(metadata, dict) or metadata.get(name) != value
+    ]
+    if mismatched:
+        raise ValueError(
+            f"model bundle selection mismatch for {model} at {revision}: "
+            f"{', '.join(mismatched)}. Preserve existing artifacts before recovery."
+        )
 
 
 def fetch_bundle(root: Path, model: str, revision: str | None = None) -> Path:
@@ -97,7 +124,7 @@ def fetch_bundle(root: Path, model: str, revision: str | None = None) -> Path:
         raise RuntimeError("install the tag-cpu or tag-gpu extra to fetch models") from exc
     destination = bundle_path(root, model, revision)
     if (destination / "model.json").exists():
-        load_bundle(destination)
+        load_bundle(destination, model=model, revision=revision)
         return destination
     spec = MODELS[model]
     revision = spec.revision if revision is None else revision
@@ -130,6 +157,7 @@ def fetch_bundle(root: Path, model: str, revision: str | None = None) -> Path:
             "label_count": len(labels),
         },
     )
+    load_bundle(destination, model=model, revision=revision)
     return destination
 
 
@@ -140,13 +168,27 @@ class ModelBundle:
     labels: list[Label]
 
 
-def load_bundle(directory: Path) -> ModelBundle:
+def load_bundle(
+    directory: Path, *, model: str | None = None, revision: str | None = None
+) -> ModelBundle:
+    """Verify an artifact, optionally also binding it to a configured selection."""
+    if model is not None:
+        _selection(model, revision)
+    elif revision is not None:
+        raise ValueError("A model revision requires an expected model selection")
     path = directory / "model.json"
     if not path.is_file():
         raise ValueError(f"model bundle missing; run fetch-model first: {directory}")
     metadata = json.loads(path.read_text(encoding="utf-8"))
-    if metadata.get("schema_version") != 1 or metadata.get("family") != "wd-v3":
+    if (
+        not isinstance(metadata, dict)
+        or type(metadata.get("schema_version")) is not int
+        or metadata.get("schema_version") != 1
+        or metadata.get("family") != "wd-v3"
+    ):
         raise ValueError("unsupported model bundle schema/family")
+    if model is not None:
+        check_model_binding(metadata, model, revision)
     hashes = {name: file_sha256(directory / name) for name in ("model.onnx", "selected_tags.csv")}
     if hashes != metadata.get("files"):
         raise ValueError("model bundle hash mismatch; model or labels have changed")
