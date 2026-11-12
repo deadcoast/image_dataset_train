@@ -27,40 +27,51 @@ directories for images or repeat completed assistant review to fill a human reco
 
 ## Remaining work against the existing plan
 
+<a id="publication-reconnect-ordering"></a>
+
+### Publication reconnect and response ordering — next source batch
+
+<!-- WORKFLOW_TASK_GROUP: M4; SHELVED: docs/SHELVED.md#m4; ACTIVE_FINDINGS: QOL21,SC15 -->
+
+Promoted from [QOL21](docs/SHELVED.md#qol21) and the localized
+[SC15 request-handling scope](docs/SHELVED.md#sc15) after CF22 delivery, following
+[PLAN's order](docs/PLAN.md#source-reconciliation-and-next-batch). This batch is
+scheduled, not implemented. Preserve durable publication jobs, settings, exact
+revision guards and saved evidence. Human acceptance remains separate.
+
+- [ ] **QOL21 — keep publication reconnect reachable.** Keep explicit refresh or
+  reconnect available independently of disabled publication mutation controls.
+  Recover after failed initial load, polling failure and a restored local server;
+  preserve unsaved settings, job identity, output links and actionable diagnostics.
+  Reconnecting must not start or duplicate a publication.
+- [ ] **QOL21 + localized SC15 — order publication responses.** Fence overlapping
+  load/start/poll responses and timers so a delayed success or error cannot replace
+  newer readiness, settings or job state. Preserve backend locking, exact revision
+  conflicts and existing restart/resume semantics. Limit shared request handling
+  to this publication flow; broader SC15 panel abstraction remains queued.
+- [ ] **Qualify and archive the bounded batch.** Reproduce the retained controller
+  failures, then test delayed/reordered success and error responses, repeated
+  reconnect, saved settings and durable job restoration. Verify installed browser
+  offline/restored-server flow and source/evidence preservation. Run focused/full
+  regressions and relevant installed checks, record exact identity and limits in
+  COMPLETED, reconcile QOL21 and the bounded SC15 portion, then replenish TODO.
+
+Dependencies: existing publication backend, state/revision contracts and the
+[source review](docs/SOURCE-REVIEW-2026-11-12.md#qol21). No duplicate-publication
+backend defect was demonstrated. Reassess QOL04/QOL15 review effectiveness next
+in PLAN order. Required M4–M6 acceptance tasks below remain unchanged.
+
 <a id="artifact-snapshot-coherence"></a>
 
-### Artifact snapshot coherence — next source batch
+### Artifact snapshot coherence — delivered
 
-<!-- WORKFLOW_TASK_GROUP: M5; SHELVED: docs/SHELVED.md#m5; ACTIVE_FINDINGS: CF22 -->
-
-Promoted from [CF22](docs/SHELVED.md#cf22) after CF24/bounded SC06 delivery,
-following [PLAN's order](docs/PLAN.md#source-reconciliation-and-next-batch). This
-batch is scheduled, not yet implemented. It makes catalog and trainer-status
-inspection report one verified artifact snapshot while preserving offline access
-and historical receipts. Human dataset acceptance remains separate.
-
-- [ ] **CF22 — return coherent catalog snapshots.** Derive parsed metadata and
-  reported identity from the same captured bytes. Verify referenced artifacts
-  against that snapshot and reject detected drift before returning catalog/query
-  results. Preserve valid relocated exports and source-offline inspection. Do not
-  rely on timestamps alone or require the whole SC02 reader-layer refactor.
-- [ ] **CF22 — bind trainer status to verified receipt/export snapshots.** Prevent
-  an earlier passed receipt from appearing current after its receipt, manifest or
-  export metadata changes during inspection. Preserve historical receipt identity,
-  current versus historical distinctions and explicit stale/invalid diagnostics.
-  Keep inspection read-only and avoid rewriting receipts or inferring acceptance.
-- [ ] **Qualify and archive the bounded batch.** Reproduce the retained deterministic
-  read races, then verify metadata/manifest/receipt changes, same-ID rewrites,
-  valid relocation, offline reads and unchanged artifact bytes. Run focused/full
-  regression, installed catalog/trainer-status commands and affected status views.
-  Record exact implementation identity, failures and qualification limits in
-  COMPLETED, then reconcile CF22 and promote the next bounded candidate.
-
-Dependencies: existing checked artifact reads, catalog metadata and trainer-receipt
-contracts, with race probes in the [source review](docs/SOURCE-REVIEW-2026-11-12.md#cf22).
-SC02's general reader extraction and TM21's query optimization remain queued.
-Next after this batch: QOL21/localized SC15 publication reconnect and response
-ordering. The required M4–M6 human acceptance tasks below remain unchanged.
+CF22 is complete in [COMPLETED](docs/COMPLETED.md#artifact-coherence-0200).
+Catalogs and trainer status use checked artifact snapshots, reject detected drift
+and preserve offline/historical inspection. Original tasks and evidence are
+archived; see [the operating guide](docs/ARTIFACT-SNAPSHOTS.md). SC02/TM21 remain
+separate queued proposals, and human acceptance stays open.
+The scoped SC19 workflow admission correction is recorded with this delivery;
+local workflow validation does not establish the final hosted run's result.
 
 <a id="model-binding-rule-contract"></a>
 

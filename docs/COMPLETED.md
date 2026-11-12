@@ -18,6 +18,134 @@ milestone; later entries may supersede them. Generated fixtures, model execution
 trainer import and human acceptance remain distinct. Evidence paths in code spans
 are relative to the repository root unless an absolute location is specified.
 
+<a id="artifact-coherence-0200"></a>
+
+## Artifact snapshot coherence — 0.20.0 — 2026-11-12
+
+Completed **CF22** in the existing cycle. Catalog summaries derive parsed values
+and identity from the same captured metadata. Catalog verification and queries use
+the captured SQLite payload, with all referenced metadata and standalone membership
+checked again before return. Collection discovery retains checked job/binding/config
+context and excludes changed dependent entries with explicit retry diagnostics.
+Unaffected rows and historical/current distinctions remain available.
+
+Trainer status checks captured export metadata, manifest, referenced metadata,
+media and membership before reporting current qualification. Receipt metadata,
+result and log are interpreted from one checked read set; detected changes or
+incomplete discovery cannot retain an earlier current pass. Changed exports clear
+the verification result. The reviewer pins artifact links to the inspected receipt
+metadata digest, including after another refresh or a same-ID replacement. Legacy
+valid receipts, historical failures, other pins, relocation and source-offline reads
+remain supported. Inspection does not repair or rewrite evidence.
+
+See [artifact snapshots and recovery](ARTIFACT-SNAPSHOTS.md). These checks detect
+observed drift; they do not lock outside writers or guarantee future immutability.
+General reader extraction (SC02), schema-reader work (SC06) and measured query
+optimization (TM21) remain queued. No trainer/model adoption or acceptance change
+was made.
+
+### Original scheduled tasks, completed
+
+- [x] **CF22 — return coherent catalog snapshots.** Derive parsed metadata and
+  reported identity from the same captured bytes. Verify referenced artifacts
+  against that snapshot and reject detected drift before returning catalog/query
+  results. Preserve valid relocated exports and source-offline inspection. Do not
+  rely on timestamps alone or require the whole SC02 reader-layer refactor.
+- [x] **CF22 — bind trainer status to verified receipt/export snapshots.** Prevent
+  an earlier passed receipt from appearing current after its receipt, manifest or
+  export metadata changes during inspection. Preserve historical receipt identity,
+  current versus historical distinctions and explicit stale/invalid diagnostics.
+  Keep inspection read-only and avoid rewriting receipts or inferring acceptance.
+- [x] **Qualify and archive the bounded batch.** Reproduce the retained deterministic
+  read races, then verify metadata/manifest/receipt changes, same-ID rewrites,
+  valid relocation, offline reads and unchanged artifact bytes. Run focused/full
+  regression, installed catalog/trainer-status commands and affected status views.
+  Record exact implementation identity, failures and qualification limits in
+  COMPLETED, then reconcile CF22 and promote the next bounded candidate.
+
+
+### Scoped push-qualification enabler — SC19
+
+The requested baseline push exposed an existing workflow admission error before
+any hosted jobs started: `.github/workflows/ci.yml` line 23, column 22 reported
+`Unrecognized named-value: 'runner'` for the job-level `runner.temp` expression.
+The correction sets `TRAINIME_HOME` in a Bash setup step from `$RUNNER_TEMP`,
+writing the value to `$GITHUB_ENV` for later steps. This preserves isolated
+application data on both configured runners without changing the frozen Python
+payload. The original three CF22 task bodies above remain unchanged.
+
+`ci-qualification.json` retains the rejected hosted run and official actionlint
+validation of the corrected workflow. This is local workflow validation, not a
+hosted Windows/Linux test pass. The hosted run for the final push remains pending.
+SC19 retains its completed source-support state with this scoped correction;
+no platform or human acceptance is inferred.
+
+### Verification and retained evidence
+
+Evidence root: `.cache/artifact-coherence-20261112/`.
+
+- The completed 0.19.0 baseline was committed and pushed to `origin/main` as
+  `a8d525f3ea82d9194c22f6e496a130637f9f3cbe` before CF22 development; the remote
+  SHA matched. `baseline-git.json` records that handoff. The new source and workflow
+  changes are a separate delivery.
+- `independent-baseline-probe.json` reproduces four races against preserved 0.19.0:
+  mixed catalog metadata/identity, late query drift, a trainer pass after export
+  drift despite an expected QA hash, and a same-ID receipt replacement inheriting
+  an earlier pass. Original bytes were restored. Eight initial failing catalog
+  regressions are retained in `catalog-before-fix.*`; focused/final review evidence
+  retains later corrections rather than erasing initial results.
+- `independent-current-probe-02.json` retained a later failure: a receipt rewritten
+  during the expensive final export verification could still appear passed. The
+  final receipt fence now follows that export check, with controlling metadata
+  checked after its payloads. `independent-current-probe-03.json` passes that race
+  and all eight other independent cases; these probes preserve generated bytes.
+- `catalog-final-focused.*` records **70 passed, 1 skipped**. That process had
+  already loaded the collection module before the last narrow fence-order change.
+  `catalog-final-order.*` separately passes all three final ordering/receipt cases,
+  including the added regression. `catalog-contract.json` preserves this exact
+  boundary; the full suite below runs against the final frozen source and tests.
+- Final full regression: **1541 passed, 16 skipped**, with no
+  failures or errors (`full-suite.xml`, `full-suite-timing.json`). Focused catalog,
+  trainer, HTTP and deterministic race checks passed. Ruff and formatting checks
+  passed for source, tests and scripts. `qualification-start.json` pins the exact
+  source/test/smoke inputs used by final qualification.
+- Isolated installed **0.20.0** qualification passed **154 command checks**
+  (`installed-01/result.json`). `artifact-snapshot-coherence.json` checks catalog
+  inspection/query on a relocated Unicode export and standalone index, with the
+  original source offline; generated trainer receipt pass/failure/stale/invalid
+  states; pinned artifact-link rejection; and recovery after exact restoration.
+  Export/catalog/report/receipt bytes were preserved. Generated receipts are
+  explicitly fixtures: no new trainer execution or import qualification is claimed.
+- `browser-qualification.json` records live installed Training import controls,
+  same-ID receipt replacement, export-drift rejection and restored status. Human
+  acceptance remains false. Screenshot inspection also checked the affected Training import view.
+  Owned tabs and servers were closed and generated artifacts were restored.
+- `actual-source.json` and `actual-installed.json` record read-only inspection of
+  the already selected collection: **399 source files / 564,441,065 bytes**, **14
+  protected records**, model and saved-score files remain unchanged. Assessment
+  revision **63** and review revision **109** remain intact. Existing export,
+  catalog and trainer receipts were inspected without running inference/import or
+  changing dataset acceptance. The checked export's **729
+  files** remain unchanged and **3 catalog rows**
+  were queried. Existing trainer evidence reports `passed`
+  across **1 receipt(s)**. This checks existing
+  evidence and does not establish a new trainer execution.
+- Runtime payload `6fb884c880f747e3b7ad83462faa1fa228da75b254a9996e5fe27d72a3c6de2e`
+  (**81 runtime files**). `package-parity.json` binds final
+  source/wheel/sdist/installed bytes, tests, documentation and command ledgers.
+  `document-validation.json` checks all 109 queue IDs, task bodies, history and
+  local links. The phase `result.json` binds final evidence and qualification limits.
+
+This delivery establishes source, generated-fixture, installed-command and browser
+behavior within the recorded scope. It does not establish new model accuracy,
+training/GPU results or human dataset acceptance. Required M4 acceptance and its
+M5/M6 dependencies stay open; no new IDENTIFIED cycle has begun.
+
+CF22 is completed in SHELVED. TODO now schedules **QOL21 + localized SC15**
+publication reconnect/response ordering in PLAN order; that next batch remains
+unimplemented. Only the localized SC15 publication portion is active; broader
+frontend request abstraction remains queued within that row.
+
 <a id="model-rule-contract-0190"></a>
 
 ## Configured model identity and saved-rule contract — 0.19.0 — 2026-11-12

@@ -950,6 +950,7 @@ def exercise(root: Path, wheel: Path, *, require_catalog=False) -> dict:
     exported.rename(relocated)
     commands.run([dataset, "verify-export", "--run", relocated])
     catalog_checked = False
+    artifact_coherence = None
     if require_catalog or (relocated / "catalog.sqlite").exists():
         assert (relocated / "catalog.sqlite").is_file()
         commands.run([dataset, "catalog-info", "--run", relocated, "--json"])
@@ -982,6 +983,9 @@ def exercise(root: Path, wheel: Path, *, require_catalog=False) -> dict:
         assert index_meta["implementation"] == implementation
         assert index_meta["media_packaged"] is False
         catalog_checked = True
+        artifact_coherence = exercise_artifact_coherence(
+            commands, dataset, root, config, relocated, index_path, implementation
+        )
     comparison = json.loads(
         commands.run(
             [
@@ -1039,6 +1043,7 @@ def exercise(root: Path, wheel: Path, *, require_catalog=False) -> dict:
         "export_left_tampered_for_evidence": True,
         "models_downloaded": False,
         "portable_catalog_checked": catalog_checked,
+        "artifact_snapshot_coherence": artifact_coherence,
         "review_features": review_features,
         "collection_navigation": collection_navigation,
         "cache_readiness": cache_readiness,
@@ -2685,6 +2690,147 @@ def exercise_model_binding(root, config, model, inspect):
     }
     save(root / "model-binding-contract.json", receipt)
     return receipt
+
+
+def exercise_artifact_coherence(
+    commands, dataset, root, config_path, exported, catalog, implementation
+):
+    """Exercise installed snapshot readers with explicit generated receipt evidence."""
+    from datetime import UTC, datetime
+
+    from image_dataset_train.config import load_config
+    from image_dataset_train.qa import create_qa
+    from image_dataset_train.review_ui import ReviewSession
+    from image_dataset_train.trainer_receipts import trainer_pin
+
+    config = load_config(config_path)
+    receipt = config.runs / "generated-trainer-snapshot-contract"
+    assert not config.source.exists(), "This check requires the original source to be offline"
+    receipt.mkdir()
+    result = {
+        **trainer_pin(),
+        "implementation": implementation,
+        "qualified": True,
+        "training_step_executed": False,
+        "export": str(exported),
+        "export_run_sha256": digest(exported / "run.json"),
+        "export_manifest_sha256": digest(exported / "manifest.jsonl"),
+        "evidence_kind": "generated fixture; no trainer execution",
+    }
+    save(receipt / "result.json", result)
+    (receipt / "loader.log").write_text("Generated receipt fixture; no trainer executed.\n")
+    metadata = {
+        "schema_version": 1,
+        "implementation": implementation,
+        "stage": "trainer-check",
+        "run_id": receipt.name,
+        "status": "completed",
+        "completed_at": datetime.now(UTC).isoformat(),
+        "files": {name: digest(receipt / name) for name in ("result.json", "loader.log")},
+    }
+    save(receipt / "run.json", metadata)
+    qa, _ = create_qa(config, exported, config_path=config_path)
+    session = ReviewSession(config, qa, config_path=config_path)
+    protected = {path: snapshot(path) for path in (exported, catalog, qa, receipt)}
+
+    def status(expected, exit_code=0):
+        value = json.loads(
+            commands.run(
+                [dataset, "trainer-status", "--run", exported, "--config", config_path, "--json"],
+                expect=exit_code,
+            ).stdout
+        )
+        assert value["status"] == expected, value
+        return value
+
+    current = status("passed")
+    assert current["export_run_sha256"] == digest(exported / "run.json")
+    assert current["latest_receipt"] == receipt.name
+    for artifact in (exported, catalog):
+        info = json.loads(
+            commands.run([dataset, "catalog-info", "--run", artifact, "--json"]).stdout
+        )
+        assert info["export_run_sha256"] == digest(exported / "run.json")
+        assert info["media_reverified"] is False
+        assert info["verification_scope"] == "catalog_and_metadata"
+        rows = json.loads(
+            commands.run(
+                [dataset, "catalog-query", "--run", artifact, "--limit", "1", "--json"]
+            ).stdout
+        )
+        assert rows
+    shown = session.training()
+    assert shown["status"] == "passed" and not shown["pilot_assessment"]["human_accepted"]
+    assert b"Generated receipt fixture" in session.trainer_artifact(receipt.name, "loader.log")
+
+    # Same-ID, internally consistent receipt replacement must not change a prior link.
+    saved_receipt = {
+        name: (receipt / name).read_bytes() for name in metadata["files"] | {"run.json": ""}
+    }
+    try:
+        changed = {**result, "qualified": False, "error": "Generated failed import fixture"}
+        save(receipt / "result.json", changed)
+        save(
+            receipt / "run.json",
+            {
+                **metadata,
+                "status": "failed",
+                "files": {name: digest(receipt / name) for name in metadata["files"]},
+            },
+        )
+        try:
+            session.trainer_artifact(receipt.name, "result.json")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Previously offered receipt link accepted same-ID replacement")
+        status("failed", 1)
+        assert session.training()["status"] == "failed"
+    finally:
+        for name, raw in saved_receipt.items():
+            (receipt / name).write_bytes(raw)
+
+    saved_export = (exported / "run.json").read_bytes()
+    try:
+        changed = json.loads(saved_export)
+        changed["snapshot_probe"] = "same run identity; different metadata bytes"
+        save(exported / "run.json", changed)
+        stale = status("no_current_receipt", 1)
+        assert stale["receipts"][0]["status"] == "stale"
+        assert session.training()["status"] == "export_invalid"
+    finally:
+        (exported / "run.json").write_bytes(saved_export)
+    manifest = exported / "manifest.jsonl"
+    saved_manifest = manifest.read_bytes()
+    try:
+        manifest.write_bytes(saved_manifest + b"\n")
+        invalid = status("export_invalid", 1)
+        assert invalid["latest_receipt"] is None and invalid["verification"] is None
+    finally:
+        manifest.write_bytes(saved_manifest)
+    status("passed")
+    recovered = session.training()
+    assert recovered["status"] == "passed"
+    assert all(snapshot(path) == before for path, before in protected.items())
+    evidence = {
+        "status": "passed",
+        "implementation": implementation,
+        "qa": str(qa),
+        "export": str(exported),
+        "catalog": str(catalog),
+        "receipt": str(receipt),
+        "source_offline": not config.source.exists(),
+        "catalog_and_export_identity_checked": True,
+        "same_id_receipt_link_rejected": True,
+        "historical_stale_receipt_preserved": True,
+        "changed_manifest_rejected": True,
+        "restored_valid_status": True,
+        "fixture_bytes_preserved": True,
+        "trainer_executed": False,
+        "human_acceptance": False,
+    }
+    save(root / "artifact-snapshot-coherence.json", evidence)
+    return evidence
 
 
 def exercise_existing_caption_cache(commands, dataset, workspace, home):

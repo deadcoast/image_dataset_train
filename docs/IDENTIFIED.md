@@ -95,8 +95,9 @@ The reconciliation promoted **CF21/CF23**; they are now delivered in
 [0.18.0](COMPLETED.md#review-integrity-0180), with exact runtime and verification
 evidence. **CF24 + bounded SC06** are now delivered in
 [0.19.0](COMPLETED.md#model-rule-contract-0190); broader SC06 schema work remains
-queued. **CF22** is the next scheduled TODO batch. Original source findings above
-remain the dated rationale, not an assertion that completed CF21/CF23/CF24 or
+queued. **CF22** is delivered in [0.20.0](COMPLETED.md#artifact-coherence-0200).
+**QOL21 + localized SC15** is the next scheduled TODO batch. Original source findings above
+remain the dated rationale, not an assertion that completed CF21/CF22/CF23/CF24 or
 bounded saved-rule gaps remain in the current source.
 M4 human acceptance and its M5/M6 dependencies remain open and separately attributed.
 

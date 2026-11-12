@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from image_dataset_train.collection_registry import (
     unlinked_path,
     validate_entry,
 )
+from image_dataset_train.inventory import file_sha256
 from image_dataset_train.preparation import read_preparation_job
 from image_dataset_train.reviews import ReviewStore
 
@@ -31,6 +33,79 @@ def _hash(value: object) -> bool:
 
 def _identifier(path: Path, checksum: str) -> str:
     return _digest({"path": path_key(path), "run_sha256": checksum})
+
+
+class _MetadataReads:
+    """Retain content identities and invalidate rows whose metadata changed."""
+
+    def __init__(self):
+        self.expected: dict[str, str | None] = {}
+        self.objects: dict[str, tuple[dict, str]] = {}
+
+    def observe(self, path: Path, checksum: str | None) -> str:
+        key = str(unlinked_path(path))
+        if key in self.expected and self.expected[key] != checksum:
+            raise ValueError(f"Collection metadata changed during inspection: {key}; retry")
+        self.expected[key] = checksum
+        return key
+
+    def object(self, path: Path) -> tuple[dict, str]:
+        key = str(unlinked_path(path))
+        if key not in self.objects:
+            value, checksum = read_object(path)
+            self.observe(path, checksum)
+            self.objects[key] = value, checksum
+        return self.objects[key]
+
+    def changed(self) -> dict[str, str]:
+        errors = {}
+        # Payloads first, then their owning run/job metadata; the collection
+        # binding is last because it determines current/historical ownership.
+        controls = {"run.json": 1, "job.json": 2, "collection.json": 3}
+        for name in sorted(self.expected, key=lambda name: controls.get(Path(name).name, 0)):
+            try:
+                path = unlinked_path(Path(name))
+                actual = file_sha256(path) if path.exists() else None
+                if actual != self.expected[name]:
+                    raise ValueError("content differs from the captured metadata")
+            except (OSError, ValueError) as exc:
+                errors[name] = (
+                    f"Collection metadata changed during inspection: {name}; retry ({exc})"
+                )
+        return errors
+
+
+def _job_snapshot(
+    workspace: Path, reads: _MetadataReads, job_id=None
+) -> tuple[Path, dict, set[str]]:
+    binding, _ = reads.object(workspace / "collection.json")
+    locator = binding.get("job")
+    parts = locator.split("/") if isinstance(locator, str) else []
+    if len(parts) != 2 or parts[0] != "jobs":
+        raise ValueError("Invalid preparation job binding")
+    selected = job_id if job_id is not None else parts[1]
+    # The existing validator remains authoritative for paths, types and job rules.
+    # Capture its inputs first, then require its returned state to be this state.
+    if (
+        not isinstance(selected, str)
+        or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", selected) is None
+    ):
+        raise ValueError("Invalid preparation job identity")
+    job = unlinked_path(workspace / "jobs" / selected)
+    captured, _ = reads.object(job / "job.json")
+    config = unlinked_path(job / "config.toml")
+    config_digest = file_sha256(config)
+    reads.observe(config, config_digest)
+    checked_job, state = read_preparation_job(workspace, job_id=selected)
+    if (
+        path_key(checked_job) != path_key(job)
+        or _digest(state) != _digest(captured)
+        or state["source"] != binding.get("source")
+        or state["config_sha256"] != config_digest
+    ):
+        raise ValueError("Preparation job changed during catalog inspection; retry")
+    dependencies = {str(workspace / "collection.json"), str(job / "job.json"), str(config)}
+    return job, state, dependencies
 
 
 def _date(value: object) -> str | None:
@@ -68,10 +143,19 @@ def _children(path: Path, errors: list, *, missing_ok: bool = False) -> list[Pat
 
 
 def _run(
-    path: Path, source: str, *, job_id=None, config_path=None, config_sha256=None, ownership=None
+    path: Path,
+    source: str,
+    *,
+    job_id=None,
+    config_path=None,
+    config_sha256=None,
+    ownership=None,
+    _reads: _MetadataReads | None = None,
 ) -> dict | None:
     path = unlinked_path(path)
-    metadata, checksum = read_object(path / "run.json")
+    metadata, checksum = (
+        read_object(path / "run.json") if _reads is None else _reads.object(path / "run.json")
+    )
     if metadata.get("source") is not None and (
         not isinstance(metadata["source"], str) or not Path(metadata["source"]).is_absolute()
     ):
@@ -126,8 +210,10 @@ def _run(
     }
 
 
-def _publication(path: Path, source: str, roots: set[str]) -> dict | None:
-    document, checksum = read_object(path)
+def _publication(
+    path: Path, source: str, roots: set[str], *, _reads: _MetadataReads | None = None
+) -> dict | None:
+    document, checksum = read_object(path) if _reads is None else _reads.object(path)
     binding = document.get("binding", {})
     if not isinstance(binding, dict):
         raise ValueError("Invalid publication binding")
@@ -191,7 +277,7 @@ def _publication(path: Path, source: str, roots: set[str]) -> dict | None:
     }
 
 
-def collection_snapshot(entry: dict) -> dict:
+def collection_snapshot(entry: dict, *, _reads: _MetadataReads | None = None) -> dict:
     """Inspect known artifact layouts, never source images, live workers or model caches."""
     validate_entry(entry)
     source, workspace = entry["source"], Path(entry["workspace"])
@@ -210,6 +296,10 @@ def collection_snapshot(entry: dict) -> dict:
         "artifact_verification": "metadata_only",
     }
     errors = result["errors"]
+    reads = _reads if _reads is not None else _MetadataReads()
+    dependencies: dict[int, set[str]] = {}
+    root_dependencies: dict[str, set[str]] = {}
+    current_dependencies = set()
     roots, review_roots, candidates = {}, set(), {}
     typed_roots = {"runs": set(), "exports": set(), "reviews": set()}
     current_review_root = None
@@ -229,7 +319,7 @@ def collection_snapshot(entry: dict) -> dict:
 
     try:
         workspace = unlinked_path(workspace)
-        _, current = read_preparation_job(workspace)
+        _, current, current_dependencies = _job_snapshot(workspace, reads)
         if path_key(current["source"]) != path_key(source):
             raise ValueError("Registered collection source differs from its workspace")
         result["current_job_id"] = current["job_id"]
@@ -238,7 +328,7 @@ def collection_snapshot(entry: dict) -> dict:
         error(workspace, exc)
     for job in _children(workspace / "jobs", errors):
         try:
-            _, state = read_preparation_job(workspace, job_id=job.name)
+            _, state, job_dependencies = _job_snapshot(workspace, reads, job.name)
             if path_key(state["source"]) != path_key(source):
                 raise ValueError("Historical job belongs to another source")
             created_at, updated_at = _date(state["created_at"]), _date(state["updated_at"])
@@ -261,22 +351,26 @@ def collection_snapshot(entry: dict) -> dict:
                     "metadata_verification": "job_contract",
                 }
             )
+            dependencies[id(result["jobs"][-1])] = job_dependencies
             for key in ("runs", "exports"):
                 root = unlinked_path(Path(state["settings"][key]))
                 if root.is_relative_to(Path(source)) or Path(source).is_relative_to(root):
                     raise ValueError("Artifact root overlaps source images")
                 roots.setdefault(path_key(root), root)
+                root_dependencies.setdefault(path_key(root), set()).update(job_dependencies)
                 typed_roots[key].add(str(root))
             review_root = unlinked_path(Path(state["settings"]["reviews"]))
             if review_root.is_relative_to(Path(source)) or Path(source).is_relative_to(review_root):
                 raise ValueError("Review root overlaps source images")
             review_roots.add(str(review_root))
+            root_dependencies.setdefault(path_key(review_root), set()).update(job_dependencies)
             typed_roots["reviews"].add(str(review_root))
             context = {
                 "job_id": job.name,
                 "config_path": config,
                 "config_sha256": state["config_sha256"],
                 "ownership": "preparation",
+                "_dependencies": job_dependencies,
             }
             # Inspect attempts even if a crash prevented the final checkpoint.
             for attempt in _children(job / "attempts", errors, missing_ok=True):
@@ -290,24 +384,48 @@ def collection_snapshot(entry: dict) -> dict:
         if not root.exists():
             result["unavailable_roots"].append(str(root))
         for published in _children(root, errors, missing_ok=True):
-            candidate(published, ownership="configured_root")
+            candidate(
+                published,
+                ownership="configured_root",
+                _dependencies=root_dependencies[path_key(root)],
+            )
     for review_root in sorted(review_roots):
         try:
             review_root = unlinked_path(Path(review_root))
             try:
-                state = ReviewStore(review_root, Path(source)).read()
+                store = ReviewStore(review_root, Path(source))
+                review_path = unlinked_path(store.path)
+                raw_review = review_path.read_bytes() if review_path.exists() else None
+                reads.observe(
+                    review_path,
+                    hashlib.sha256(raw_review).hexdigest() if raw_review is not None else None,
+                )
+                state = store.read()
+                if raw_review is not None and _digest(state) != _digest(json.loads(raw_review)):
+                    raise ValueError("Review metadata changed during catalog inspection; retry")
+                if raw_review is None and state["revision"] != 0:
+                    raise ValueError("Review metadata appeared during catalog inspection; retry")
                 record = {"root": str(review_root), "revision": state["revision"]}
                 result["review_revisions"].append(record)
+                dependencies[id(record)] = root_dependencies[path_key(review_root)] | {
+                    str(review_path)
+                }
                 if current_review_root and path_key(current_review_root) == path_key(review_root):
                     result["current_review_revision"] = state["revision"]
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 error(review_root, exc)
             for directory in _children(review_root / "publications", errors, missing_ok=True):
                 try:
-                    publication = _publication(directory / "job.json", source, set(roots))
+                    publication = _publication(
+                        directory / "job.json", source, set(roots), _reads=reads
+                    )
                     if publication is None:
                         continue
                     result["publications"].append(publication)
+                    publication_dependencies = root_dependencies[path_key(review_root)] | {
+                        str(directory / "job.json")
+                    }
+                    dependencies[id(publication)] = publication_dependencies
                     for attempt in publication["attempts"]:
                         request = attempt["request"]
                         for stage in ("groups", "export", "qa"):
@@ -325,6 +443,7 @@ def collection_snapshot(entry: dict) -> dict:
                                     published,
                                     config_path=request.get("config_path"),
                                     ownership="publication",
+                                    _dependencies=publication_dependencies,
                                 )
                 except (OSError, ValueError, KeyError, TypeError) as exc:
                     error(directory, exc)
@@ -333,17 +452,20 @@ def collection_snapshot(entry: dict) -> dict:
     receipts = []
     for path, context in candidates.values():
         try:
-            record = _run(path, source, **context)
+            context = dict(context)
+            record_dependencies = context.pop("_dependencies", set()) | {str(path / "run.json")}
+            record = _run(path, source, **context, _reads=reads)
             if record:
                 (receipts if record["stage"] == "trainer-check" else result["runs"]).append(record)
+                dependencies[id(record)] = record_dependencies
         except (OSError, ValueError, KeyError, TypeError) as exc:
             error(path, exc)
     exports = [record for record in result["runs"] if record["stage"] == "export"]
     for record in receipts:
         try:
             path = Path(record["path"])
-            meta, checksum = read_object(path / "run.json")
-            receipt, receipt_checksum = read_object(path / "result.json")
+            meta, checksum = reads.object(path / "run.json")
+            receipt, receipt_checksum = reads.object(path / "result.json")
             if (
                 checksum != record["run_sha256"]
                 or meta.get("files", {}).get("result.json") != receipt_checksum
@@ -376,9 +498,37 @@ def collection_snapshot(entry: dict) -> dict:
             }
             record["receipt_binding"] = "exact_export" if exact else "stale_same_path"
             record["export_ids"] = [export["id"] for export in exact or same_path]
+            dependencies[id(record)].add(str(path / "result.json"))
+            for export in exact or same_path:
+                dependencies[id(record)].update(dependencies[id(export)])
             result["runs"].append(record)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             error(record["path"], exc)
+    changed = reads.changed()
+    for path, message in changed.items():
+        error(path, message)
+    for key in ("jobs", "runs", "publications", "review_revisions"):
+        result[key] = [
+            row for row in result[key] if not dependencies.get(id(row), set()) & changed.keys()
+        ]
+    if current_dependencies & changed.keys():
+        result["current_job_id"] = None
+        result["current_review_revision"] = None
+    elif current_review_root and not any(
+        path_key(row["root"]) == path_key(current_review_root) for row in result["review_revisions"]
+    ):
+        result["current_review_revision"] = None
+    for key, paths in result["registered_roots"].items():
+        result["registered_roots"][key] = [
+            path
+            for path in paths
+            if not root_dependencies.get(path_key(path), set()) & changed.keys()
+        ]
+    result["unavailable_roots"] = [
+        path
+        for path in result["unavailable_roots"]
+        if not root_dependencies.get(path_key(path), set()) & changed.keys()
+    ]
     result["jobs"].sort(key=lambda row: (str(row["created_at"] or ""), row["id"]))
     result["runs"].sort(key=lambda row: (str(row["created_at"] or ""), row["id"]))
     result["errors"] = sorted(errors, key=lambda row: (row["path"], row["error"]))
@@ -389,7 +539,8 @@ def select_run(entry: dict, selector: str, expected_sha256: str | None = None) -
     """Resolve an exact path-and-content record; never choose by basename or latest time."""
     if not _hash(selector) or (expected_sha256 is not None and not _hash(expected_sha256)):
         raise ValueError("Choose an exact catalog run ID and valid expected checksum")
-    snapshot = collection_snapshot(entry)
+    reads = _MetadataReads()
+    snapshot = collection_snapshot(entry, _reads=reads)
     matches = [record for record in snapshot["runs"] if record["id"] == selector]
     if len(matches) != 1:
         raise ValueError(
@@ -400,4 +551,6 @@ def select_run(entry: dict, selector: str, expected_sha256: str | None = None) -
     _, checksum = read_object(Path(selected["path"]) / "run.json")
     if checksum != selected["run_sha256"] or expected_sha256 not in (None, checksum):
         raise ValueError("Selected run metadata changed; refresh the catalog")
+    if reads.changed():
+        raise ValueError("Collection metadata changed during selection; refresh the catalog")
     return selected

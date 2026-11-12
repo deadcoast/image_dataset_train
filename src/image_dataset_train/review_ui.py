@@ -67,7 +67,11 @@ class ReviewSession:
             self.config.runs,
             expected_export_sha256=self.meta["input_run_sha256"],
         )
-        self.receipts = {item["id"]: Path(item["path"]) for item in result["receipts"]}
+        self.receipts = {
+            item["id"]: (Path(item["path"]), item.get("receipt_run_sha256"))
+            for item in result["receipts"]
+            if item["integrity"]
+        }
         args = [
             "dataset",
             "trainer-check",
@@ -81,13 +85,25 @@ class ReviewSession:
         for item in result["receipts"]:
             if item["integrity"]:
                 item["artifacts"] = {
-                    name: "trainer-receipt/" + item["id"] + "/" + name
+                    name: "trainer-receipt/"
+                    + item["id"]
+                    + "/"
+                    + name
+                    + "?receipt_sha256="
+                    + item["receipt_run_sha256"]
                     for name in ("result.json", "loader.log")
                 }
         return result
 
-    def trainer_artifact(self, identifier, name):
-        return receipt_artifact(self.receipts[identifier], name)
+    def trainer_artifact(self, identifier, name, *, expected_receipt_sha256=None):
+        directory, digest = self.receipts[identifier]
+        return receipt_artifact(
+            directory,
+            name,
+            expected_receipt_sha256=(
+                digest if expected_receipt_sha256 is None else expected_receipt_sha256
+            ),
+        )
 
     def page(self):
         try:
@@ -494,7 +510,16 @@ def make_server(
                     self.reply(200, selected.training())
                 elif path.startswith("trainer-receipt/"):
                     _, identifier, name = path.split("/", 2)
-                    self.reply(200, selected.trainer_artifact(identifier, name), "text/plain")
+                    query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
+                    self.reply(
+                        200,
+                        selected.trainer_artifact(
+                            identifier,
+                            name,
+                            expected_receipt_sha256=query.get("receipt_sha256", [None])[0],
+                        ),
+                        "text/plain",
+                    )
                 elif path == "api/assessment":
                     state = selected.assessments.read()
                     self.reply(

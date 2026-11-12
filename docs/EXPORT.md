@@ -121,6 +121,10 @@ configuration errors return 2. The [reviewer's Training import tab](QA.md) shows
 the same evidence, split counts, buckets, result JSON, and loader logs. Reading
 receipts requires neither the original collection nor an installed trainer runtime.
 
+Status and receipt downloads use the [artifact snapshot contract](ARTIFACT-SNAPSHOTS.md).
+Changed export or receipt bytes cannot retain an earlier current pass, and
+historical receipts remain separate from current qualification.
+
 Export verifies membership, hashes, nonempty paired captions, split consistency,
 and absence of orphan files before publication. `verify-export` repeats those
 snapshot checks without source images, prior runs, tagging extras, or config.toml.

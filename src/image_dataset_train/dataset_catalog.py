@@ -26,6 +26,7 @@ from image_dataset_train.inventory import file_sha256
 
 FORMAT = "imagefolder-sqlite-v1"
 APPLICATION_ID = 0x49445443
+_NO_DIGEST = object()
 _COLUMNS = (
     "id",
     "source_path",
@@ -103,6 +104,52 @@ def _checked(root: Path, name: str, expected: str) -> bytes:
     if hashlib.sha256(raw).hexdigest() != expected:
         raise ValueError(f"Catalog artifact hash mismatch: {name}")
     return raw
+
+
+class _CatalogReads:
+    """One captured metadata view, with a content fence before it is returned."""
+
+    def __init__(self, directory: Path):
+        self.directory = _root(directory)
+        self.captured: dict[str, bytes] = {}
+        self.members: set[str] | None = None
+
+    def read(self, name: str, expected: object = _NO_DIGEST) -> bytes:
+        if name not in self.captured:
+            self.captured[name] = (
+                _path(self.directory, name).read_bytes()
+                if expected is _NO_DIGEST
+                else _checked(self.directory, name, expected)
+            )
+        raw = self.captured[name]
+        if expected is not _NO_DIGEST and hashlib.sha256(raw).hexdigest() != expected:
+            raise ValueError(f"Catalog artifact hash mismatch: {name}")
+        return raw
+
+    def membership(self) -> set[str]:
+        actual = set()
+        for path in self.directory.rglob("*"):
+            if path.is_symlink() or path.is_junction():
+                raise ValueError("Linked artifact in standalone catalog")
+            if path.is_file():
+                actual.add(path.relative_to(self.directory).as_posix())
+        return actual
+
+    def verify(self) -> None:
+        _root(self.directory)
+        if self.members is not None and self.membership() != self.members:
+            raise ValueError("Catalog file membership changed during inspection; retry")
+        # Check the controlling metadata last, after all of its captured payload.
+        for name in sorted(self.captured, key=lambda name: name == "run.json"):
+            try:
+                actual = file_sha256(_path(self.directory, name))
+            except OSError as exc:
+                raise ValueError(
+                    f"Catalog changed during inspection: {name}; retry ({exc})"
+                ) from exc
+            if actual != hashlib.sha256(self.captured[name]).hexdigest():
+                raise ValueError(f"Catalog changed during inspection: {name}; retry")
+        _root(self.directory)
 
 
 def _rows(raw: bytes) -> list[dict]:
@@ -283,14 +330,32 @@ def write_catalog(directory: Path, rows: list[dict]) -> dict:
     return descriptor
 
 
-def _connect(database: Path) -> sqlite3.Connection:
-    connection = sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)
+def _connect(database: Path, *, captured: bytes | None = None) -> sqlite3.Connection:
+    # The captured database is the same byte sequence whose checksum and contents
+    # are verified. Later path replacement cannot change rows between validation
+    # and querying, including a transient replacement restored before the fence.
+    connection = sqlite3.connect(
+        ":memory:" if captured is not None else database.as_uri() + "?mode=ro",
+        uri=captured is None,
+    )
+    if captured is not None:
+        try:
+            connection.deserialize(captured)
+        except sqlite3.Error:
+            connection.close()
+            raise
     connection.execute("PRAGMA query_only = ON")
     connection.execute("PRAGMA trusted_schema = OFF")
     return connection
 
 
-def verify_catalog_payload(directory: Path, descriptor: dict, rows: list[dict]) -> dict:
+def verify_catalog_payload(
+    directory: Path,
+    descriptor: dict,
+    rows: list[dict],
+    *,
+    _captured: dict[str, bytes] | None = None,
+) -> dict:
     """Reconcile every indexed field and metadata row with the authoritative export rows.
 
     The owning export/catalog verifier checks file hashes before calling this helper.
@@ -300,12 +365,23 @@ def verify_catalog_payload(directory: Path, descriptor: dict, rows: list[dict]) 
     rows = _ordered(rows)
     if descriptor != _descriptor(rows):
         raise ValueError("Catalog descriptor differs from export manifest")
+    reads = _CatalogReads(directory) if _captured is None else None
+    captured = (
+        {
+            name: reads.read(name)
+            for name in [descriptor["database"], *descriptor["metadata"].values()]
+        }
+        if reads is not None
+        else _captured
+    )
     for split, name in descriptor["metadata"].items():
         expected = [_imagefolder(row) for row in rows if row["split"] == split]
-        if _rows(_path(directory, name).read_bytes()) != expected:
+        if _rows(captured[name]) != expected:
             raise ValueError(f"Catalog ImageFolder metadata differs from export manifest: {split}")
     try:
-        connection = _connect(_path(directory, descriptor["database"]))
+        connection = _connect(
+            _path(directory, descriptor["database"]), captured=captured[descriptor["database"]]
+        )
         try:
             if (
                 connection.execute("PRAGMA application_id").fetchone()[0] != APPLICATION_ID
@@ -357,6 +433,8 @@ def verify_catalog_payload(directory: Path, descriptor: dict, rows: list[dict]) 
             connection.close()
     except sqlite3.Error as exc:
         raise ValueError(f"Invalid catalog database: {exc}") from exc
+    if reads is not None:
+        reads.verify()
     return {
         "images": len(rows),
         "groups": len({row["group_id"] for row in rows}),
@@ -388,9 +466,12 @@ def build_catalog(export_run: Path, *, output_root: Path) -> tuple[Path, dict]:
 
     implementation = implementation_identity()
     export_run, output_root = _root(export_run), _root(output_root)
-    raw_meta = _path(export_run, "run.json").read_bytes()
+    export_reads = _CatalogReads(export_run)
+    raw_meta = export_reads.read("run.json")
     metadata = json.loads(raw_meta)
+    captured = {name: export_reads.read(name, digest) for name, digest in metadata["files"].items()}
     verify_export(export_run)
+    export_reads.verify()
     if not isinstance(metadata.get("source"), str) or not Path(metadata["source"]).is_absolute():
         raise ValueError("Export is missing its absolute source identity")
     source = Path(metadata["source"]).resolve()
@@ -400,14 +481,8 @@ def build_catalog(export_run: Path, *, output_root: Path) -> tuple[Path, dict]:
         or source.is_relative_to(output_root)
     ):
         raise ValueError("Catalog output must be separate from source and frozen export artifacts")
-    manifest = _checked(export_run, "manifest.jsonl", metadata["files"]["manifest.jsonl"])
-    provenance = {
-        name: _checked(export_run, name, digest)
-        for name, digest in metadata["files"].items()
-        if name.startswith("provenance/")
-    }
-    if _path(export_run, "run.json").read_bytes() != raw_meta:
-        raise ValueError("Export metadata changed while building catalog")
+    manifest = captured["manifest.jsonl"]
+    provenance = {name: raw for name, raw in captured.items() if name.startswith("provenance/")}
     output_root.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".pending-catalog-", dir=output_root))
     descriptor = write_catalog(staging, _rows(manifest))
@@ -438,15 +513,18 @@ def build_catalog(export_run: Path, *, output_root: Path) -> tuple[Path, dict]:
     atomic_json(staging / "run.json", meta)
     # Verify the frozen metadata before publication, independent of source availability.
     summary = _read_catalog(staging, allow_staging=True)
+    export_reads.verify()
     final = output_root / run_id
     publish_directory(staging, final)
     summary["catalog"] = str(final)
     return final, summary
 
 
-def _read_catalog(directory: Path, *, allow_staging: bool = False) -> dict:
-    directory = _root(directory)
-    meta = json.loads(_path(directory, "run.json").read_bytes())
+def _load_catalog(directory: Path, *, allow_staging: bool = False) -> tuple[dict, _CatalogReads]:
+    reads = _CatalogReads(directory)
+    directory = reads.directory
+    raw_meta = reads.read("run.json")
+    meta = json.loads(raw_meta)
     if "implementation" in meta:
         validate_implementation_identity(meta["implementation"])
     if (
@@ -467,7 +545,7 @@ def _read_catalog(directory: Path, *, allow_staging: bool = False) -> dict:
     if not isinstance(files, dict):
         raise ValueError("Catalog is missing artifact checksums")
     # Verify all frozen non-media metadata, including review and preparation provenance.
-    captured = {name: _checked(directory, name, digest) for name, digest in files.items()}
+    captured = {name: reads.read(name, digest) for name, digest in files.items()}
     embedded = meta["stage"] == "export"
     if embedded:
         required = {
@@ -480,7 +558,7 @@ def _read_catalog(directory: Path, *, allow_staging: bool = False) -> dict:
         if not required <= files.keys():
             raise ValueError("Export catalog is missing frozen provenance")
         rows = _rows(captured["manifest.jsonl"])
-        export_meta, export_digest = meta, file_sha256(directory / "run.json")
+        export_meta, export_digest = meta, hashlib.sha256(raw_meta).hexdigest()
     else:
         if meta.get("media_packaged") is not False:
             raise ValueError("Standalone catalog must declare that media is not packaged")
@@ -511,14 +589,10 @@ def _read_catalog(directory: Path, *, allow_staging: bool = False) -> dict:
             original_name = "manifest.jsonl" if name == "export-manifest.jsonl" else name
             if hashlib.sha256(captured[name]).hexdigest() != export_meta["files"][original_name]:
                 raise ValueError(f"Catalog differs from frozen export provenance: {name}")
-        actual = set()
-        for path in directory.rglob("*"):
-            if path.is_symlink() or path.is_junction():
-                raise ValueError("Linked artifact in standalone catalog")
-            if path.is_file():
-                actual.add(path.relative_to(directory).as_posix())
+        actual = reads.membership()
         if actual != set(files) | {"run.json"}:
             raise ValueError("Catalog has untracked or missing files")
+        reads.members = actual
         rows = _rows(captured["export-manifest.jsonl"])
         export_digest = meta["export_run_sha256"]
     required_payload = {
@@ -527,7 +601,7 @@ def _read_catalog(directory: Path, *, allow_staging: bool = False) -> dict:
     }
     if not required_payload <= files.keys():
         raise ValueError("Catalog payload is not checksum-bound")
-    summary = verify_catalog_payload(directory, descriptor, rows)
+    summary = verify_catalog_payload(directory, descriptor, rows, _captured=captured)
     return {
         "catalog": str(directory),
         "format": FORMAT,
@@ -540,7 +614,13 @@ def _read_catalog(directory: Path, *, allow_staging: bool = False) -> dict:
         "media_reverified": False,
         "acceptance": "not established by catalog",
         **summary,
-    }
+    }, reads
+
+
+def _read_catalog(directory: Path, *, allow_staging: bool = False) -> dict:
+    summary, reads = _load_catalog(directory, allow_staging=allow_staging)
+    reads.verify()
+    return summary
 
 
 def read_catalog(directory: Path) -> dict:
@@ -576,12 +656,12 @@ def query_catalog(
             raise ValueError("Catalog filters must be nonempty text without NUL characters")
     if label is not None:
         label = annotation_name(label)
-    verified = read_catalog(directory)
-    directory = _root(directory)
+    try:
+        _, reads = _load_catalog(directory)
+    except (KeyError, TypeError, AttributeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Malformed catalog: {exc}") from exc
+    directory = reads.directory
     database = _path(directory, "catalog.sqlite")
-    before = verified["catalog_sha256"]
-    if file_sha256(database) != before:
-        raise ValueError("Catalog changed before query; retry after restoring its immutable files")
     clauses, parameters = [], []
     for column, value in (("split", split), ("group_id", group_id)):
         if value is not None:
@@ -597,7 +677,7 @@ def query_catalog(
         parameters.append(text)
     where = " WHERE " + " AND ".join(clauses) if clauses else ""
     try:
-        connection = _connect(database)
+        connection = _connect(database, captured=reads.captured["catalog.sqlite"])
         try:
             result = [
                 json.loads(row[0])
@@ -612,6 +692,5 @@ def query_catalog(
             connection.close()
     except sqlite3.Error as exc:
         raise ValueError(f"Invalid catalog database: {exc}") from exc
-    if file_sha256(database) != before:
-        raise ValueError("Catalog changed during query; retry after restoring its immutable files")
+    reads.verify()
     return result

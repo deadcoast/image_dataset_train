@@ -269,3 +269,12 @@ frozen 0.17.0 audit; the original probes above are historical findings. SC06's
 broader schema-reader proposal remains queued. The next scheduled source batch
 is [CF22](../TODO.md#artifact-snapshot-coherence), with human acceptance separate
 and the existing PLAN still open.
+
+### Subsequent artifact snapshot delivery — 0.20.0
+
+CF22 was subsequently implemented and qualified in
+[COMPLETED](COMPLETED.md#artifact-coherence-0200). This remains the frozen 0.17.0
+audit; the original race observations remain historical evidence. SC02 and TM21
+remain queued. The next scheduled source batch is
+[QOL21/localized SC15](../TODO.md#publication-reconnect-ordering), with human
+acceptance separate and the existing PLAN still open.

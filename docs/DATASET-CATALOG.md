@@ -139,3 +139,7 @@ configuration or source directory. `build_catalog(export_run, *, output_root)`
 creates the standalone historical index. This slice implements the portable
 data/query contract in [PREPARATION](PREPARATION.md); it is not a global collection
 registry or source-relocation mechanism.
+
+Reads bind parsed metadata, reported identity and queried rows to captured bytes,
+then reject detected artifact drift before returning. See the
+[artifact snapshot contract](ARTIFACT-SNAPSHOTS.md) for coherence and recovery.

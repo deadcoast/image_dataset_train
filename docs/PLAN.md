@@ -69,13 +69,16 @@ evaluation/comparison/explanations. Historical offline evidence, recovery backup
 and explicit attribution remain supported. SC06's broader schema-reader proposal
 remains queued; only the saved-rule portion is complete.
 
-The next scheduled source batch is **CF22 artifact snapshot coherence**, defined
-in [TODO](../TODO.md#artifact-snapshot-coherence). Catalog reads and trainer status
-must bind parsed data, hashes, verification and reported identity to one checked
-snapshot, rejecting detected drift while preserving offline/historical inspection.
-Keep SC02 general reader extraction and TM21 query optimization separate. Then
-reassess **QOL21 + localized SC15** publication reconnect and
-response ordering. Existing M4 workflow improvements such as QOL04/QOL15 follow
+**CF22** is delivered in [0.20.0](COMPLETED.md#artifact-coherence-0200): catalog
+and trainer-status reads bind their values and identity to checked artifact
+snapshots, reject detected changes and retain offline/historical inspection.
+SC02 general reader extraction and TM21 measured query optimization remain queued.
+
+The next scheduled source batch is **QOL21 + localized SC15**, defined in
+[TODO](../TODO.md#publication-reconnect-ordering): keep publication reconnect
+reachable and fence stale load/start/poll responses while preserving durable jobs,
+settings and revision guards. Broader SC15 request abstraction remains queued.
+Existing M4 workflow improvements such as QOL04/QOL15 follow
 the confirmed integrity/recovery gaps. Other operating improvements remain
 ordered candidates: SC04/SC12 for reliable writes/settings; DP03/NF14/QOL12/QOL13
 for preparation clarity and storage/recovery; CF11 before split search/constraints;

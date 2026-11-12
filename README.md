@@ -86,6 +86,8 @@ unavailable images can be retried without losing edits.
 [Model selection and saved rules](docs/MODEL-RULE-CONTRACT.md) bind configured
 inference to the requested bundle and interpret saved scores using their checked
 recorded thresholds, with explicit mismatch and historical-evidence recovery.
+[Artifact snapshot checks](docs/ARTIFACT-SNAPSHOTS.md) keep catalog results and
+trainer status tied to verified bytes, with recovery after detected changes.
 
 After saving corrections and publishing an updated export, compare the exact inputs:
 
